@@ -1,0 +1,33 @@
+name: probe
+on:
+  push:
+    branches: [probe]
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fetch samples
+        run: |
+          mkdir -p probe
+          B=https://odre.opendatasoft.com/api/explore/v2.1/catalog/datasets
+          for ds in eco2mix-national-tr eco2mix-national-cons-def; do
+            curl -sS "$B/$ds" -o probe/$ds.meta.json || true
+            curl -sS "$B/$ds/records?limit=5&order_by=date_heure%20desc" -o probe/$ds.latest.json || true
+            curl -sS "$B/$ds/records?limit=3&order_by=date_heure%20asc" -o probe/$ds.first.json || true
+            curl -sS "$B/$ds/records?select=min(date_heure)%20as%20mn,max(date_heure)%20as%20mx,count(*)%20as%20n" -o probe/$ds.range.json || true
+            curl -sS "$B/$ds/records?select=count(*)%20as%20n,min(date_heure)%20as%20mn&where=consommation%20is%20not%20null" -o probe/$ds.notnull.json || true
+          done
+          curl -sS "$B/eco2mix-national-tr/exports/parquet?where=date_heure%3E%3D%222026-09-20%22" -o probe/tr_sample.parquet -w "%{http_code} %{size_download}\n" | tee probe/tr_parquet_status.txt
+          curl -sS "$B/eco2mix-national-cons-def/exports/parquet?where=date_heure%3E%3D%222024-12-01%22" -o probe/def_sample.parquet -w "%{http_code} %{size_download}\n" | tee probe/def_parquet_status.txt
+          curl -sS "https://archive-api.open-meteo.com/v1/archive?latitude=48.85,45.76&longitude=2.35,4.84&start_date=2024-01-01&end_date=2024-01-03&hourly=temperature_2m&timezone=Europe%2FParis" -o probe/openmeteo_archive.json || true
+          curl -sS "https://api.open-meteo.com/v1/forecast?latitude=48.85,45.76&longitude=2.35,4.84&hourly=temperature_2m&past_days=2&forecast_days=2&timezone=Europe%2FParis" -o probe/openmeteo_forecast.json || true
+          curl -sS "https://calendrier.api.gouv.fr/jours-feries/metropole.json" -o probe/feries.json || true
+          ls -la probe
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git add probe && git commit -m "probe results" && git push
