@@ -1,0 +1,86 @@
+name: Daily pipeline
+
+# Every morning: extract -> dbt build + data tests -> forecast tomorrow -> score -> publish.
+# The lake (raw Parquet, forecast log, models, reports) is kept on the `data` branch as a single
+# snapshot commit, rewritten by each run; the code stays on `main`.
+on:
+  push:            # a code change republishes the dashboard (published forecasts are never rewritten)
+    branches: [main]
+    paths: ["src/**", "dbt/**", "site/**", "pyproject.toml", ".github/workflows/pipeline.yml", ".github/actions/**"]
+  schedule:
+    - cron: "47 6 * * *"   # 06:47 UTC = 08:47 in Paris in summer, 07:47 in winter
+  workflow_dispatch:
+    inputs:
+      full_history:
+        description: Re-download the whole éCO2mix and weather history
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: lake        # never two runs writing the lake at the same time
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GRID_LAKE: ${{ github.workspace }}/lake
+      GRID_WAREHOUSE: ${{ github.workspace }}/warehouse.duckdb
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-lake
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      - name: Extract
+        run: gridforecast ingest ${{ inputs.full_history && '--full-history' || '' }}
+
+      - name: Transform and test (dbt)
+        id: dbt
+        working-directory: dbt
+        run: dbt build --profiles-dir .
+
+      - name: First run only - backtest and first model
+        if: hashFiles('lake/models/current.json') == ''
+        run: |
+          gridforecast backtest
+          gridforecast train
+
+      - name: Forecast tomorrow
+        run: gridforecast predict
+
+      - name: Score past forecasts
+        run: gridforecast evaluate
+
+      - name: Build the dashboard
+        if: always() && steps.dbt.outcome != 'skipped'
+        run: gridforecast site --out public
+
+      - name: Save the lake
+        if: always()
+        uses: ./.github/actions/save-lake
+
+      - uses: actions/upload-pages-artifact@v4
+        if: always() && hashFiles('public/index.html') != ''
+        with:
+          path: public
+
+  deploy:
+    needs: run
+    if: always() && needs.run.result != 'cancelled'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

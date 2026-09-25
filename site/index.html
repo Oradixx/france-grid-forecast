@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>France Grid Forecast</title>
+<meta name="description" content="Day-ahead forecast of French electricity consumption, published every morning by an automated data pipeline and compared with RTE's official forecast.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M18 2 6 18h8l-2 12 12-16h-8z' fill='%23eb6834'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #6f6d68;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --s-actual: #2a78d6; --s-model: #eb6834; --s-rte: #1baf7a; --s-naive: #4a3aa7;
+  --good: #0ca30c; --bad: #d03b3b; --good-text: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9a988f;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --s-actual: #3987e5; --s-model: #d95926; --s-rte: #199e70; --s-naive: #9085e9;
+    --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9a988f;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --s-actual: #3987e5; --s-model: #d95926; --s-rte: #199e70; --s-naive: #9085e9;
+  --good-text: #0ca30c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+.lede { color: var(--ink-2); margin: 0 0 6px; max-width: 760px; }
+.meta { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+.meta a, a { color: var(--s-actual); }
+.card { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 20px; margin-bottom: 20px; }
+.sub { color: var(--ink-2); font-size: 13px; margin: 0 0 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.tile { background: var(--surface); border-radius: 12px; box-shadow: 0 0 0 1px var(--ring); padding: 16px 18px; }
+.tile .label { color: var(--ink-2); font-size: 13px; }
+.tile .value { font-size: 30px; font-weight: 600; margin: 2px 0; }
+.tile .note { color: var(--muted); font-size: 13px; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.key { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.key.dash { border-top-style: dashed; }
+.chart { position: relative; height: 340px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); }
+th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pass { color: var(--good-text); font-weight: 600; }
+.fail { color: var(--bad); font-weight: 600; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } .chart { height: 280px; } }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin-top: 10px; }
+.empty { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; }
+ol.flow { padding-left: 20px; margin: 8px 0 0; color: var(--ink-2); }
+ol.flow li { margin: 4px 0; }
+code { font-size: 13px; background: var(--page); padding: 1px 5px; border-radius: 4px; }
+footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+.scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>France grid forecast</h1>
+  <p class="lede">Tomorrow's electricity consumption in France, forecast every morning by an automated pipeline
+    and scored against what was really consumed, next to RTE's official day-ahead forecast.</p>
+  <p class="meta" id="meta">Loading…</p>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card">
+    <h2>Consumption: last 14 days and tomorrow</h2>
+    <p class="sub">Hourly national consumption in GW (Paris time). Our forecast is issued each morning for the next day.</p>
+    <div class="legend">
+      <span><i class="key" style="border-color:var(--s-actual)"></i>Measured</span>
+      <span><i class="key" style="border-color:var(--s-model)"></i>Our forecast</span>
+      <span><i class="key dash" style="border-color:var(--s-rte)"></i>RTE day-ahead forecast</span>
+    </div>
+    <div class="chart"><canvas id="c-load" aria-label="Line chart of measured consumption, our forecast and RTE's forecast"></canvas></div>
+  </section>
+
+  <section class="card">
+    <h2>Live track record</h2>
+    <p class="sub">Mean absolute percentage error (MAPE) of each published forecast, per day, once the day has been measured. Lower is better.</p>
+    <div id="live-wrap">
+      <div class="legend">
+        <span><i class="key" style="border-color:var(--s-model)"></i>Our forecast</span>
+        <span><i class="key dash" style="border-color:var(--s-rte)"></i>RTE day-ahead</span>
+        <span><i class="key" style="border-color:var(--s-naive)"></i>Naive: same hour last week</span>
+      </div>
+      <div class="chart"><canvas id="c-live" aria-label="Daily forecast error of the three methods"></canvas></div>
+    </div>
+    <details><summary>Table view</summary><div class="scroll"><table id="t-live"></table></div></details>
+  </section>
+
+  <section class="two">
+    <div class="card">
+      <h2>Backtest</h2>
+      <p class="sub" id="bt-sub"></p>
+      <table id="t-bt"></table>
+      <details><summary>Month by month</summary><div class="scroll"><table id="t-bt-monthly"></table></div></details>
+    </div>
+    <div class="card">
+      <h2>Model registry</h2>
+      <p class="sub">Retrained every week. A new model replaces the current one only if it passes the quality gate on the last 8 weeks it did not see.</p>
+      <div class="scroll"><table id="t-reg"></table></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Data quality</h2>
+    <p class="sub" id="dq-sub"></p>
+    <div class="scroll"><table id="t-dq"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>How it works</h2>
+    <ol class="flow">
+      <li><b>Extract</b>: every morning GitHub Actions downloads the new éCO2mix data (RTE, 15-minute points) and Open-Meteo temperatures for 8 cities into Parquet files.</li>
+      <li><b>Transform and test</b>: dbt on DuckDB types, deduplicates and aggregates them to hourly tables, then runs the data tests above. A failed test stops the run: no forecast is published on bad data.</li>
+      <li><b>Forecast</b>: a gradient-boosting model (scikit-learn) predicts the 24 hours of tomorrow from the calendar, holidays, temperature and consumption lags available at issue time.</li>
+      <li><b>Score and publish</b>: each forecast is logged, scored once measured, and this page is rebuilt.</li>
+    </ol>
+    <p class="sub" style="margin-top:12px">Code, tests and design notes: <a href="https://github.com/Oradixx/france-grid-forecast">github.com/Oradixx/france-grid-forecast</a></p>
+  </section>
+
+  <footer>
+    Data: éCO2mix by RTE, via <a href="https://odre.opendatasoft.com/">ODRÉ</a> (Licence Ouverte 2.0) ·
+    Weather: <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0) ·
+    A personal project by Clément Vurpillot, not affiliated with RTE.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
+<script>
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtPct = (v) => v == null ? '–' : v.toFixed(2) + ' %';
+const fmtGW = (mw) => mw == null ? '–' : (mw / 1000).toFixed(1) + ' GW';
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+const dateFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const timeLabel = (s) => { const [d, t] = s.split('T'); return dateFmt.format(new Date(d + 'T12:00')) + ' ' + t; };
+
+function fillTable(table, head, rows) {
+  table.replaceChildren();
+  const tr = el('tr');
+  head.forEach(([h, num]) => tr.appendChild(el('th', h, num ? 'num' : '')));
+  table.appendChild(tr);
+  rows.forEach((r) => {
+    const row = el('tr');
+    r.forEach((c, i) => {
+      const td = el('td', null, head[i][1] ? 'num' : '');
+      if (c instanceof Node) td.appendChild(c); else td.textContent = c;
+      row.appendChild(td);
+    });
+    table.appendChild(row);
+  });
+}
+
+function tile(label, value, note) {
+  const t = el('div', null, 'tile');
+  t.append(el('div', label, 'label'), el('div', value, 'value'), el('div', note, 'note'));
+  return t;
+}
+
+// vertical hairline that follows the pointer (the crosshair finds the X)
+const crosshair = {
+  id: 'crosshair',
+  afterDraw(chart) {
+    const a = chart.tooltip?.getActiveElements?.();
+    if (!a || !a.length) return;
+    const x = a[0].element.x, { top, bottom } = chart.chartArea, ctx = chart.ctx;
+    ctx.save(); ctx.strokeStyle = css('--axis'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore();
+  },
+};
+
+function baseOptions(yTitle, yFmt) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: css('--surface'), titleColor: css('--ink-2'), bodyColor: css('--ink'),
+        borderColor: css('--ring'), borderWidth: 1, padding: 10, boxWidth: 14, boxHeight: 2, usePointStyle: false,
+        callbacks: { label: (c) => ` ${yFmt(c.parsed.y)}  ${c.dataset.label}` },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: css('--axis') },
+           ticks: { color: css('--muted'), maxRotation: 0, autoSkipPadding: 24 } },
+      y: { grid: { color: css('--grid') }, border: { display: false },
+           title: { display: true, text: yTitle, color: css('--muted') },
+           ticks: { color: css('--muted') } },
+    },
+  };
+}
+
+const line = (label, data, color, dash) => ({
+  label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0,
+  pointHoverRadius: 4, borderDash: dash ? [6, 4] : [], spanGaps: false, tension: 0,
+});
+
+fetch('data.json').then((r) => r.json()).then((d) => {
+  const gen = new Date(d.generated_at);
+  document.getElementById('meta').textContent =
+    `Updated ${gen.toLocaleString('en-GB', { timeZone: 'Europe/Paris' })} (Paris) · last measured hour ${timeLabel(d.last_measured_hour)}` +
+    (d.model ? ` · model ${d.model.version}` : '');
+
+  // --- tiles
+  const tiles = document.getElementById('tiles');
+  const lastIssue = d.forecasts.length ? d.forecasts[d.forecasts.length - 1].issue_date : null;
+  const tomorrow = d.forecasts.filter((f) => f.issue_date === lastIssue);
+  if (tomorrow.length) {
+    const peak = tomorrow.reduce((a, b) => (b.mw > a.mw ? b : a));
+    tiles.appendChild(tile('Next forecast peak', fmtGW(peak.mw), `at ${timeLabel(peak.hour)}`));
+  }
+  const s = d.live && d.live.summary;
+  const w = s && (s.last_30_days || s.since_launch);
+  tiles.appendChild(w ? tile(`Live error, last ${w.days} day${w.days > 1 ? 's' : ''}`, fmtPct(w.model), `RTE ${fmtPct(w.rte_d1)} · naive ${fmtPct(w.naive_last_week)}`)
+                      : tile('Live error', '–', 'first scores after the first measured day'));
+  if (d.backtest) {
+    const o = d.backtest.overall;
+    tiles.appendChild(tile('Backtest error', fmtPct(o.model.mape), `RTE ${fmtPct(o.rte_d1.mape)} · naive ${fmtPct(o.naive_last_week.mape)}`));
+  }
+  if (d.data_quality) {
+    const q = d.data_quality;
+    tiles.appendChild(tile('Data tests', `${q.passed} / ${q.total}`, q.passed === q.total ? 'all passed on the last run' : 'failures: see below'));
+  }
+
+  // --- chart 1: measured, RTE and our forecast
+  const labels = d.chart.hours.slice();
+  const fcByHour = new Map(d.forecasts.map((f) => [f.hour, f]));
+  d.forecasts.forEach((f) => { if (!labels.includes(f.hour)) labels.push(f.hour); });
+  labels.sort();
+  const idx = new Map(d.chart.hours.map((h, i) => [h, i]));
+  const pick = (arr) => labels.map((h) => (idx.has(h) ? arr[idx.get(h)] : null));
+  const rte = labels.map((h, i) => { const v = pick(d.chart.rte_forecast_d1_mw)[i]; return v != null ? v : fcByHour.get(h)?.rte ?? null; });
+  const gw = (arr) => arr.map((v) => (v == null ? null : v / 1000));
+  new Chart(document.getElementById('c-load'), {
+    type: 'line',
+    data: { labels: labels.map(timeLabel), datasets: [
+      line('Measured', gw(pick(d.chart.consumption_mw)), css('--s-actual')),
+      line('Our forecast', gw(labels.map((h) => fcByHour.get(h)?.mw ?? null)), css('--s-model')),
+      line('RTE day-ahead', gw(rte), css('--s-rte'), true),
+    ] },
+    options: baseOptions('GW', (v) => v.toFixed(1) + ' GW'),
+    plugins: [crosshair],
+  });
+
+  // --- chart 2: live track record
+  const days = (d.live && d.live.days) || [];
+  if (days.length < 2) {
+    document.getElementById('live-wrap').replaceChildren(el('p',
+      days.length ? `One day scored so far (${days[0].day}): our error ${fmtPct(days[0].model)}, RTE ${fmtPct(days[0].rte_d1)}. The chart appears from the second day.`
+                  : 'No forecast has been scored yet: the first one is scored the day after its target day.', 'empty'));
+  } else {
+    new Chart(document.getElementById('c-live'), {
+      type: 'line',
+      data: { labels: days.map((x) => dateFmt.format(new Date(x.day + 'T12:00'))), datasets: [
+        { ...line('Our forecast', days.map((x) => x.model), css('--s-model')), pointRadius: 3 },
+        { ...line('RTE day-ahead', days.map((x) => x.rte_d1), css('--s-rte'), true), pointRadius: 3 },
+        { ...line('Naive (last week)', days.map((x) => x.naive_last_week), css('--s-naive')), pointRadius: 3 },
+      ] },
+      options: { ...baseOptions('MAPE %', (v) => v.toFixed(2) + ' %') },
+      plugins: [crosshair],
+    });
+  }
+  fillTable(document.getElementById('t-live'), [['Day'], ['Ours', 1], ['RTE', 1], ['Naive', 1], ['Model']],
+    days.slice().reverse().map((x) => [x.day, fmtPct(x.model), fmtPct(x.rte_d1), fmtPct(x.naive_last_week), x.model_version]));
+
+  // --- backtest
+  if (d.backtest) {
+    const b = d.backtest, o = b.overall;
+    document.getElementById('bt-sub').textContent =
+      `Trained on data before ${b.test_from}, tested on ${o.hours.toLocaleString('en-GB')} hours after it. ` +
+      'It uses observed temperatures, so it is an optimistic bound: the live track record uses real weather forecasts.';
+    fillTable(document.getElementById('t-bt'), [['Method'], ['MAPE', 1], ['MAE', 1]], [
+      ['Our model', fmtPct(o.model.mape), fmtGW(o.model.mae_mw)],
+      ['RTE day-ahead', fmtPct(o.rte_d1.mape), fmtGW(o.rte_d1.mae_mw)],
+      ['Naive (same hour last week)', fmtPct(o.naive_last_week.mape), fmtGW(o.naive_last_week.mae_mw)],
+    ]);
+    fillTable(document.getElementById('t-bt-monthly'), [['Month'], ['Ours', 1], ['RTE', 1], ['Naive', 1]],
+      b.monthly_mape.map((m) => [m.month, fmtPct(m.model), fmtPct(m.rte_d1), fmtPct(m.naive_last_week)]));
+  }
+
+  // --- registry
+  fillTable(document.getElementById('t-reg'), [['Version'], ['Holdout MAPE', 1], ['Gate']],
+    d.registry.slice().reverse().map((r) => [r.version, fmtPct(r.holdout_mape),
+      el('span', r.passed ? '✓ promoted' : '✗ rejected', r.passed ? 'pass' : 'fail')]));
+
+  // --- data quality
+  if (d.data_quality) {
+    const q = d.data_quality;
+    document.getElementById('dq-sub').textContent =
+      `${q.passed} of ${q.total} dbt tests passed on the last run (${new Date(q.generated_at).toLocaleString('en-GB', { timeZone: 'Europe/Paris' })}).`;
+    fillTable(document.getElementById('t-dq'), [['Test'], ['Result']],
+      q.tests.map((t) => [t.name, el('span', t.status === 'pass' ? '✓ pass' : `✗ ${t.status}`, t.status === 'pass' ? 'pass' : 'fail')]));
+  }
+}).catch((e) => { document.getElementById('meta').textContent = 'Could not load data.json: ' + e; });
+</script>
+</body>
+</html>

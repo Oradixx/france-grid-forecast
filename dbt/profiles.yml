@@ -1,0 +1,7 @@
+grid:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('GRID_WAREHOUSE', '../warehouse.duckdb') }}"
+      threads: 4

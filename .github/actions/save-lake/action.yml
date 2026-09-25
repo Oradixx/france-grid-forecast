@@ -1,0 +1,18 @@
+name: Save the lake
+description: Replace the `data` branch with a single commit holding the current lake
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: lake
+      run: |
+        if [ -z "$(ls -A . | grep -v '^.git$')" ]; then echo "Empty lake, nothing to save"; exit 0; fi
+        git config user.name "github-actions[bot]"
+        git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+        # One snapshot commit: the forecast log keeps its own history inside the Parquet file,
+        # so the branch does not need to grow with every run.
+        git checkout --quiet --orphan snapshot
+        git add -A
+        git commit --quiet -m "Lake snapshot $(date -u +%Y-%m-%dT%H:%MZ) (run ${{ github.run_id }})"
+        git push --quiet --force origin snapshot:data
+        du -sh --exclude=.git .

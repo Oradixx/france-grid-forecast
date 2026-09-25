@@ -1,0 +1,14 @@
+name: Checkout the lake
+description: Check out the `data` branch into ./lake (an empty lake on the very first run)
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+        if git ls-remote --exit-code --heads "$url" data > /dev/null; then
+          git clone --quiet --depth 1 --branch data "$url" lake
+        else
+          echo "No data branch yet: starting with an empty lake"
+          mkdir lake && git -C lake init --quiet -b data && git -C lake remote add origin "$url"
+        fi

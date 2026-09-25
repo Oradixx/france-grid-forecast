@@ -1,0 +1,12 @@
+# the lake lives on the `data` branch, checked out here by the workflows
+/lake/
+/public/
+warehouse.duckdb*
+dbt/target/
+dbt/logs/
+dbt/.user.yml
+logs/
+__pycache__/
+*.egg-info/
+.venv/
+.DS_Store

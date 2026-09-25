@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gridforecast"
+version = "1.0.0"
+description = "Day-ahead forecast of French electricity consumption: éCO2mix + Open-Meteo, dbt on DuckDB, scikit-learn, GitHub Actions."
+requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Clément Vurpillot" }]
+# Exact pins: the model is pickled, and a pickled scikit-learn model must be loaded by the
+# version that saved it (checked at load time). Dependabot proposes the upgrades.
+dependencies = [
+    "pandas==3.0.2",
+    "numpy==2.4.4",
+    "pyarrow==25.0.1",
+    "duckdb==1.5.5",
+    "dbt-core==1.12.5",
+    "dbt-duckdb==1.11.0",
+    "scikit-learn==1.8.0",
+    "joblib==1.5.3",
+    "holidays==0.105",
+    "requests==2.33.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[project.scripts]
+gridforecast = "gridforecast.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

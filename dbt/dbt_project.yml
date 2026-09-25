@@ -1,0 +1,22 @@
+name: grid
+version: "1.0.0"
+profile: grid
+config-version: 2
+
+model-paths: [models]
+seed-paths: [seeds]
+test-paths: [tests]
+macro-paths: [macros]
+
+vars:
+  # where the Parquet lake is (the `data` branch, checked out by the workflows)
+  lake: "{{ env_var('GRID_LAKE', '../lake') }}"
+  # CI runs on a frozen sample, so data freshness is only checked in production
+  check_freshness: true
+
+models:
+  grid:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

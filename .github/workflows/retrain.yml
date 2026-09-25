@@ -1,0 +1,41 @@
+name: Weekly retrain
+
+# Every Monday: refresh the whole history (RTE consolidates past months), rebuild, backtest,
+# train a candidate and promote it only if it passes the quality gate (see src/gridforecast/model.py).
+on:
+  schedule:
+    - cron: "13 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lake
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GRID_LAKE: ${{ github.workspace }}/lake
+      GRID_WAREHOUSE: ${{ github.workspace }}/warehouse.duckdb
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/checkout-lake
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - run: gridforecast ingest --full-history
+      - name: Transform and test (dbt)
+        working-directory: dbt
+        run: dbt build --profiles-dir .
+      - run: gridforecast backtest
+      - name: Train, gate, promote
+        run: gridforecast train
+      - name: Save the lake
+        if: always()
+        uses: ./.github/actions/save-lake

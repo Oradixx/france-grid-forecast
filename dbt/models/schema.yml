@@ -1,0 +1,72 @@
+version: 2
+
+seeds:
+  - name: cities
+    description: Cities averaged into the national temperature, with their weights.
+    columns:
+      - name: city
+        data_tests: [unique, not_null]
+
+models:
+  - name: stg_eco2mix
+    description: >
+      éCO2mix history (definitive + consolidated) and real time, typed and deduplicated:
+      one row per 15-minute timestamp, the most final version wins.
+    columns:
+      - name: ts_utc
+        data_tests: [unique, not_null]
+      - name: nature_rank
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3]
+
+  - name: stg_weather
+    description: Hourly temperature per city, observed first, else the latest forecast.
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: [hour_utc, city]
+
+  - name: fct_temperature_hourly
+    description: Population-weighted national temperature.
+    columns:
+      - name: hour_utc
+        data_tests: [unique, not_null]
+      - name: temperature_c
+        data_tests:
+          - not_null
+          - value_between:
+              arguments:
+                min_value: -25
+                max_value: 45
+
+  - name: fct_grid_hourly
+    description: Hourly national consumption, RTE day-ahead forecast, production mix and temperature.
+    columns:
+      - name: hour_utc
+        data_tests:
+          - unique
+          - not_null
+          - no_hour_gaps:
+              arguments:
+                where_not_null: consumption_mw
+      - name: consumption_mw
+        description: Mean national consumption over the hour (MW).
+        data_tests:
+          - value_between:
+              arguments:
+                min_value: 20000
+                max_value: 110000
+      - name: rte_forecast_d1_mw
+        data_tests:
+          - value_between:
+              arguments:
+                min_value: 20000
+                max_value: 110000
+      - name: co2_g_per_kwh
+        data_tests:
+          - value_between:
+              arguments:
+                min_value: 0
+                max_value: 200
