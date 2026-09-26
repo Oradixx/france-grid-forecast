@@ -49,11 +49,10 @@ jobs:
         working-directory: dbt
         run: dbt build --profiles-dir .
 
-      - name: First run only - backtest and first model
-        if: hashFiles('lake/models/current.json') == ''
+      - name: Backtest and train, only on the first run or after a change of the model code
         run: |
-          gridforecast backtest
-          gridforecast train
+          gridforecast backtest --if-stale
+          gridforecast train --if-stale
 
       - name: Forecast tomorrow
         run: gridforecast predict

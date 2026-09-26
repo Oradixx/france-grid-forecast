@@ -18,9 +18,10 @@ from . import config
 FEATURES = [
     'hour', 'dow', 'doy_sin', 'doy_cos', 'is_holiday', 'is_bridge', 'is_weekend_or_holiday',
     'temperature_c', 'temp_day_mean', 'temp_smooth', 'heating_degrees', 'cooling_degrees',
-    'lag_48h', 'lag_168h', 'lag_48h_was_off', 'lag_168h_was_off',
+    'lag_48h', 'lag_168h', 'lag_48h_rel', 'lag_168h_rel', 'lag_48h_was_off', 'lag_168h_was_off',
 ]
 TARGET = 'consumption_mw'
+LEVEL = 'level_7d'
 
 
 def load(warehouse=None):
@@ -75,6 +76,11 @@ def build(df):
     # Lags, available at issue time (see module docstring)
     out['lag_48h'] = out[TARGET].shift(48)
     out['lag_168h'] = out[TARGET].shift(168)
+    # Recent level: mean of the last 7 days available at issue time. The model predicts
+    # consumption *relative* to it (see model.py), and the lags are also given relative to it.
+    out[LEVEL] = out[TARGET].shift(48).rolling(168, min_periods=150).mean()
+    out['lag_48h_rel'] = out['lag_48h'] / out[LEVEL]
+    out['lag_168h_rel'] = out['lag_168h'] / out[LEVEL]
     out['lag_48h_was_off'] = out['is_weekend_or_holiday'].shift(48)
     out['lag_168h_was_off'] = out['is_weekend_or_holiday'].shift(168)
     return out

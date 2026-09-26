@@ -228,7 +228,9 @@ fetch('data.json').then((r) => r.json()).then((d) => {
                       : tile('Live error', '–', 'first scores after the first measured day'));
   if (d.backtest) {
     const o = d.backtest.overall;
-    tiles.appendChild(tile('Backtest error', fmtPct(o.model.mape), `RTE ${fmtPct(o.rte_d1.mape)} · naive ${fmtPct(o.naive_last_week.mape)}`));
+    tiles.appendChild(o.rte_d1
+      ? tile('Backtest, real-time data', fmtPct(o.model_on_realtime.mape), `RTE ${fmtPct(o.rte_d1.mape)} · naive ${fmtPct(o.naive_on_realtime.mape)}`)
+      : tile('Backtest error', fmtPct(o.model.mape), `naive ${fmtPct(o.naive_last_week.mape)}`));
   }
   if (d.data_quality) {
     const q = d.data_quality;
@@ -280,15 +282,22 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   if (d.backtest) {
     const b = d.backtest, o = b.overall;
     document.getElementById('bt-sub').textContent =
-      `Trained on data before ${b.test_from}, tested on ${o.hours.toLocaleString('en-GB')} hours after it. ` +
-      'It uses observed temperatures, so it is an optimistic bound: the live track record uses real weather forecasts.';
-    fillTable(document.getElementById('t-bt'), [['Method'], ['MAPE', 1], ['MAE', 1]], [
+      `Trained on data before ${b.test_from}, tested on the ${o.hours.toLocaleString('en-GB')} hours after it, with observed temperatures ` +
+      '(an optimistic bound: the live track record uses weather forecasts). RTE publishes consumption in two versions, and its ' +
+      'forecast targets the real-time one, which sits 2-3 % below the consolidated history: RTE is only compared on real-time data.';
+    const rows = [
+      [`All test hours (${o.hours.toLocaleString('en-GB')})`, '', ''],
       ['Our model', fmtPct(o.model.mape), fmtGW(o.model.mae_mw)],
-      ['RTE day-ahead', fmtPct(o.rte_d1.mape), fmtGW(o.rte_d1.mae_mw)],
       ['Naive (same hour last week)', fmtPct(o.naive_last_week.mape), fmtGW(o.naive_last_week.mae_mw)],
-    ]);
-    fillTable(document.getElementById('t-bt-monthly'), [['Month'], ['Ours', 1], ['RTE', 1], ['Naive', 1]],
-      b.monthly_mape.map((m) => [m.month, fmtPct(m.model), fmtPct(m.rte_d1), fmtPct(m.naive_last_week)]));
+    ];
+    if (o.rte_d1) rows.push(
+      [`Real-time data only (${o.realtime_hours.toLocaleString('en-GB')} h)`, '', ''],
+      ['Our model', fmtPct(o.model_on_realtime.mape), fmtGW(o.model_on_realtime.mae_mw)],
+      ['RTE day-ahead', fmtPct(o.rte_d1.mape), fmtGW(o.rte_d1.mae_mw)],
+      ['Naive (same hour last week)', fmtPct(o.naive_on_realtime.mape), fmtGW(o.naive_on_realtime.mae_mw)]);
+    fillTable(document.getElementById('t-bt'), [['Method'], ['MAPE', 1], ['MAE', 1]], rows.map((r) => r[1] === '' ? [el('b', r[0]), '', ''] : r));
+    fillTable(document.getElementById('t-bt-monthly'), [['Month'], ['Data'], ['Ours', 1], ['RTE', 1], ['Naive', 1]],
+      b.monthly_mape.map((m) => [m.month, m.data_version, fmtPct(m.model), fmtPct(m.rte_d1), fmtPct(m.naive_last_week)]));
   }
 
   // --- registry

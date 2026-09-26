@@ -50,6 +50,21 @@ flowchart LR
 | **MLOps** | Weekly retrain on the full history, promotion only through a quality gate, registry of every version, append-only forecast log, scikit-learn version check at load time. | [`model.py`](src/gridforecast/model.py), [`forecast.py`](src/gridforecast/forecast.py) |
 | **Publish** | Static dashboard (Chart.js) with the forecasts, the live track record, the backtest, the registry and the data test results. | [`site/`](site/index.html), [`site.py`](src/gridforecast/site.py) |
 
+## Results
+
+Mean absolute percentage error (MAPE) on hourly national consumption, first run (September 2026):
+
+| Evaluation | Our model | RTE day-ahead | Naive (same hour last week) |
+|---|---|---|---|
+| Holdout: last 8 weeks, model trained on everything before | **1.87 %** | 1.45 % | 3.50 % |
+| Backtest: trained on 2012-2024, real-time data of summer 2026 | 2.26 % | 1.43 % | 4.38 % |
+| Backtest: trained on 2012-2024, all of 2025-2026 | 2.23 % | not comparable (see below) | 6.50 % |
+
+The model halves the error of the naive baseline; RTE's official forecast stays better, which is expected
+from the grid operator's own forecasting team and weather inputs. Both evaluations use observed temperatures,
+so they are optimistic: the [live track record](https://oradixx.github.io/france-grid-forecast/), built from
+forecasts really published each morning with weather forecasts, is the number that counts.
+
 ## Design choices
 
 - **No leakage by construction.** The forecast is issued on the morning of day D for the 24 hours of D+1,
@@ -61,6 +76,14 @@ flowchart LR
 - **Honest evaluation.** The backtest uses *observed* temperatures, so it is an optimistic bound. The live
   track record, which uses real weather forecasts, is the number that counts. Both are compared with RTE's
   day-ahead forecast and with a naive "same hour last week" baseline.
+- **Relative target.** The model predicts consumption divided by its level over the last 7 available days,
+  then multiplies back. It follows slow trends (efficiency, the 2022-23 energy savings) and it makes the
+  model insensitive to the level gap between the two versions of RTE's data (next section). Older years
+  also weigh less in training (half-life of 2 years).
+- **Retrain only through a gate.** Every week a candidate is trained without the last 8 weeks, scored on
+  them, and promoted only if its error is below 6 % and at least 25 % below the naive baseline. Every
+  candidate is kept in the registry with its scores, promoted or not. A change to the model code triggers
+  a retrain on the next run (the model version carries a hash of its definition).
 - **The lake is a git branch.** The `data` branch holds a single snapshot commit (raw Parquet, forecast log,
   models, reports), rewritten by each run: free, versioned by the forecast log itself, and it keeps the
   `main` history for code only.
@@ -79,6 +102,12 @@ Real sources are messier than tutorials:
   integers in the other. Staging reads files by column name and casts every measure explicitly.
 - **Granularity changes.** Consumption is published every 30 minutes in the history and every 15 minutes
   in real time; the hourly mean and a `n_points` column keep both comparable.
+- **Two versions of the truth.** RTE publishes consumption in real time, then replaces it months later
+  with consolidated and definitive values, which sit **2 to 3 % higher**. RTE's own day-ahead forecast is
+  biased by -2.1 % against the consolidated history but only +0.3 % against real-time data: it targets the
+  real-time version. Scoring it against consolidated data made it look worse than my first model; the
+  comparison is now only made on real-time data, and the live scores freeze the measured value the day it
+  is first published.
 - **Revisions.** Recent real-time values are revised and months move from "real time" to "consolidated"
   to "definitive": staging keeps the most final version of each timestamp.
 
