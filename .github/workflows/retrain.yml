@@ -4,7 +4,7 @@ name: Weekly retrain
 # train a candidate and promote it only if it passes the quality gate (see src/gridforecast/model.py).
 on:
   schedule:
-    - cron: "13 5 * * 1"
+    - cron: "43 1 * * 1"   # before the daily run, so Monday's forecast uses the new model
   workflow_dispatch:
 
 permissions:

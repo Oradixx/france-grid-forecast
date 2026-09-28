@@ -8,7 +8,10 @@ on:
     branches: [main]
     paths: ["src/**", "dbt/**", "site/**", "pyproject.toml", ".github/workflows/pipeline.yml", ".github/actions/**"]
   schedule:
-    - cron: "47 6 * * *"   # 06:47 UTC = 08:47 in Paris in summer, 07:47 in winter
+    # 03:17 UTC = 05:17 in Paris in summer, 04:17 in winter. GitHub starts scheduled runs late under
+    # load (5-6 h late at 06:47 UTC in the first days), so the cron is early enough to still publish
+    # in the morning. The real issue time is logged in forecasts.parquet (`issued_at`).
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       full_history:
