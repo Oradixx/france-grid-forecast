@@ -21,11 +21,15 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
 
-from . import config
+from . import config, gha
 
 log = logging.getLogger(__name__)
 session = requests.Session()
 session.headers['User-Agent'] = 'france-grid-forecast (github.com/Oradixx/france-grid-forecast)'
+
+
+class ClientError(Exception):
+    """4xx answer (other than 429): not retried."""
 
 
 def get(url, params=None, retries=4):
@@ -35,7 +39,9 @@ def get(url, params=None, retries=4):
             r = session.get(url, params=params, timeout=300)
             if r.status_code == 429 or r.status_code >= 500:
                 raise requests.HTTPError(f'{r.status_code} {r.text[:200]}')
-            r.raise_for_status()
+            if r.status_code >= 400:
+                # a client error will not fix itself: fail now, with the API's own explanation
+                raise ClientError(f'{r.status_code} for {url} {params or ""}: {r.text[:300]}')
             return r
         except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as e:
             if attempt == retries - 1:
@@ -155,11 +161,48 @@ def weather_archive_start():
     return (last - timedelta(days=5)).date().isoformat()
 
 
+def realtime_freshness(now=None, max_lag_hours=6):
+    """Hours since the last measured consumption in the real-time data. RTE publishes its day-ahead
+    forecast before the measures, so rows with a forecast but no consumption are ignored."""
+    files = sorted((config.RAW_ECO2MIX / 'realtime').glob('month=*.parquet'))
+    if not files:
+        return None
+    df = pd.concat(pd.read_parquet(f, columns=['date_heure', 'consommation']) for f in files[-2:])
+    measured = pd.to_datetime(df.loc[df['consommation'].notna(), 'date_heure'], utc=True)
+    if measured.empty:
+        return None
+    last = measured.max()
+    lag = ((now or pd.Timestamp.now(tz='UTC')) - last) / pd.Timedelta(hours=1)
+    if lag > max_lag_hours:
+        gha.annotate('warning', f'last measured consumption is {last:%Y-%m-%d %H:%M} UTC ({lag:.0f} h ago): '
+                     'the forecast needs measures up to 48 h before each target hour',
+                     title='RTE real-time data is late')
+    return lag
+
+
+class IngestError(Exception):
+    pass
+
+
 def run(full_history=False):
     """Daily: real time + recent weather. `full_history` (weekly) re-downloads the éCO2mix history,
-    which RTE consolidates month after month. The weather archive is only backfilled once."""
+    which RTE consolidates month after month. The weather archive is only backfilled once.
+
+    Each source is tried even if another one fails (they are independent), every failure is
+    reported as an annotation, and the step fails at the end if anything failed."""
+    steps = []
     if full_history or not any((config.RAW_ECO2MIX / 'history').glob('*.parquet')):
-        ingest_history()
-    ingest_realtime()
-    ingest_weather_archive(start=weather_archive_start())
-    ingest_weather_forecast()
+        steps.append(('éCO2mix history (ODRÉ)', ingest_history))
+    steps += [('éCO2mix real time (ODRÉ)', ingest_realtime),
+              ('weather archive (Open-Meteo)', lambda: ingest_weather_archive(start=weather_archive_start())),
+              ('weather forecast (Open-Meteo)', ingest_weather_forecast)]
+    failed = []
+    for name, step in steps:
+        try:
+            step()
+        except Exception as e:  # noqa: BLE001 - reported, then re-raised as a whole below
+            failed.append(name)
+            gha.annotate('error', f'{type(e).__name__}: {e}', title=f'Extract failed: {name}')
+    realtime_freshness()
+    if failed:
+        raise IngestError(f'{len(failed)} source(s) failed: {", ".join(failed)}')

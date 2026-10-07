@@ -32,6 +32,8 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      pages: ${{ steps.pages.outcome }}
     env:
       GRID_LAKE: ${{ github.workspace }}/lake
       GRID_WAREHOUSE: ${{ github.workspace }}/warehouse.duckdb
@@ -72,13 +74,15 @@ jobs:
         uses: ./.github/actions/save-lake
 
       - uses: actions/upload-pages-artifact@v4
+        id: pages
         if: always() && hashFiles('public/index.html') != ''
         with:
           path: public
 
   deploy:
     needs: run
-    if: always() && needs.run.result != 'cancelled'
+    # deploy whenever a dashboard was built, even if a later step failed; skip when there is none
+    if: always() && needs.run.outputs.pages == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

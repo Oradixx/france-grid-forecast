@@ -15,10 +15,20 @@ import json
 import logging
 import sys
 
-from . import config, features, forecast, ingest, model, site
+from . import config, features, forecast, gha, ingest, model, site
 
 
 def main(argv=None):
+    """Run a command; on failure, also write the reason as a GitHub Actions annotation."""
+    try:
+        return _main(argv)
+    except Exception as e:
+        cmd = (argv if argv is not None else sys.argv[1:])[:1]
+        gha.annotate('error', f'{type(e).__name__}: {e}', title=f"gridforecast {' '.join(cmd)} failed")
+        raise
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(prog='gridforecast', description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
