@@ -78,6 +78,23 @@ def ingest_history():
         write_partition(part.sort_values('date_heure'), config.RAW_ECO2MIX / 'history' / f'year={year}.parquet')
 
 
+def align_types(new, ref):
+    """ODRÉ sometimes changes a column's type from one export to the next (in October 2026,
+    `hydraulique_fil_eau_eclusee` started arriving as text: '1813'). A partition must keep one
+    type per column, so a column that was numeric in the stored data is converted back to numbers;
+    each conversion is reported, with the values that were not numbers."""
+    new = new.copy()
+    for col in new.columns.intersection(ref.columns).drop('date_heure', errors='ignore'):
+        if pd.api.types.is_numeric_dtype(ref[col]) and not pd.api.types.is_numeric_dtype(new[col]):
+            converted = pd.to_numeric(new[col], errors='coerce')
+            lost = int(converted.isna().sum() - new[col].isna().sum())
+            gha.annotate('warning', f'{col} arrived as {new[col].dtype}, converted back to numbers'
+                         + (f' ({lost} non-numeric values set to null)' if lost else ''),
+                         title='éCO2mix schema drift')
+            new[col] = converted
+    return new
+
+
 def ingest_realtime(days=4):
     """Re-download real-time data from a few days before the last stored row: RTE revises recent
     values, and missed runs are caught up automatically. First run: the whole dataset."""
@@ -89,6 +106,8 @@ def ingest_realtime(days=4):
         since = min(last - timedelta(days=2), datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
     new = eco2mix_export(config.ECO2MIX_REALTIME, since=since)
     new['date_heure'] = pd.to_datetime(new['date_heure'], utc=True)
+    if files:  # keep the types of the stored data, also for a new month's partition
+        new = align_types(new, pd.read_parquet(files[-1]))
     for month, part in new.groupby(new['date_heure'].dt.strftime('%Y-%m')):
         path = config.RAW_ECO2MIX / 'realtime' / f'month={month}.parquet'
         if path.exists():

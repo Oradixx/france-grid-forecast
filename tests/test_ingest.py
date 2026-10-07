@@ -105,3 +105,24 @@ def test_freshness_warns_when_measures_stop(tmp_path, monkeypatch, capsys):
     assert round(lag) == 49
     assert '::warning title=RTE real-time data is late::last measured consumption is 2026-10-05 09:00' \
         in capsys.readouterr().out
+
+
+def test_realtime_survives_a_column_sent_as_text(tmp_path, monkeypatch, capsys):
+    """Regression: on 6 October 2026 ODRÉ sent hydraulique_fil_eau_eclusee as text."""
+    monkeypatch.setenv('GITHUB_ACTIONS', 'true')
+    monkeypatch.setattr(config, 'LAKE', tmp_path)
+    monkeypatch.setattr(config, 'RAW_ECO2MIX', tmp_path / 'raw' / 'eco2mix')
+    ts = pd.date_range('2026-10-05 08:00', periods=4, freq='15min', tz='UTC')
+    stored = pd.DataFrame({'date_heure': ts[:2], 'nature': 'Données temps réel',
+                           'hydraulique_fil_eau_eclusee': [1800.0, 1810.0]})
+    ingest.write_partition(stored, config.RAW_ECO2MIX / 'realtime' / 'month=2026-10.parquet')
+    sent = pd.DataFrame({'date_heure': ts[1:], 'nature': 'Données temps réel',
+                         'hydraulique_fil_eau_eclusee': ['1811', '1813', 'ND']})
+    monkeypatch.setattr(ingest, 'get', lambda url, params=None: FakeResponse(parquet_bytes(sent)))
+    ingest.ingest_realtime()
+    out = pd.read_parquet(tmp_path / 'raw/eco2mix/realtime/month=2026-10.parquet')
+    assert out['hydraulique_fil_eau_eclusee'].tolist()[:3] == [1800.0, 1811.0, 1813.0]
+    assert pd.isna(out['hydraulique_fil_eau_eclusee'].iloc[3])
+    out = capsys.readouterr().out   # the text dtype is 'object' or 'str' depending on pandas
+    assert '::warning title=éCO2mix schema drift::hydraulique_fil_eau_eclusee arrived as ' in out
+    assert 'converted back to numbers (1 non-numeric values set to null)' in out
