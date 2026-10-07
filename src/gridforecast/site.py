@@ -33,6 +33,17 @@ def _read(path):
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def _issues(fc):
+    """When the last forecast was really issued, and the days with no forecast at all (a failed
+    run is not re-done later: the log only holds what was published on time)."""
+    times = fc.groupby('issue_date')['issued_at'].min().sort_index()
+    days = pd.date_range(times.index[0], times.index[-1], freq='D').strftime('%Y-%m-%d')
+    issued = pd.Timestamp(times.iloc[-1])
+    return {'last_issue_date': times.index[-1],
+            'last_issued_at': issued.tz_convert(config.PARIS).strftime('%Y-%m-%dT%H:%M'),
+            'missing_issue_dates': [d for d in days if d not in times.index]}
+
+
 def build(df, out, dbt_target=None):
     out = Path(out)
     shutil.rmtree(out, ignore_errors=True)
@@ -43,9 +54,10 @@ def build(df, out, dbt_target=None):
     since = (last - pd.Timedelta(days=14)).floor('D')
     chart = _series(df, [TARGET, 'rte_forecast_d1_mw'], since)
 
-    forecasts = []
+    forecasts, issues = [], None
     if config.FORECASTS.exists():
         fc = pd.read_parquet(config.FORECASTS)
+        issues = _issues(fc)
         fc['target_hour_utc'] = pd.to_datetime(fc['target_hour_utc'], utc=True)
         # the latest issue for each target hour
         fc = fc.sort_values('issue_date').drop_duplicates('target_hour_utc', keep='last')
@@ -61,6 +73,7 @@ def build(df, out, dbt_target=None):
         'last_measured_hour': last.tz_convert(config.PARIS).strftime('%Y-%m-%dT%H:%M'),
         'chart': chart,
         'forecasts': forecasts,
+        'issues': issues,
         'live': _read(config.REPORTS / 'live.json'),
         'backtest': _read(config.REPORTS / 'backtest.json'),
         'model': current and {k: current[k] for k in ('version', 'trained_at', 'data_until', 'holdout', 'gate', 'rows')},

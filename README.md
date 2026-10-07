@@ -8,7 +8,7 @@
 
 **Live dashboard: https://oradixx.github.io/france-grid-forecast/**
 
-Every morning, an automated pipeline downloads the latest French electricity data, tests it, forecasts
+Every day, an automated pipeline downloads the latest French electricity data, tests it, forecasts
 **tomorrow's national consumption hour by hour**, and scores every past forecast against what was really
 consumed, next to **RTE's official day-ahead forecast** and a naive baseline.
 
@@ -63,16 +63,23 @@ Mean absolute percentage error (MAPE) on hourly national consumption, first run 
 The model halves the error of the naive baseline; RTE's official forecast stays better, which is expected
 from the grid operator's own forecasting team and weather inputs. Both evaluations use observed temperatures,
 so they are optimistic: the [live track record](https://oradixx.github.io/france-grid-forecast/), built from
-forecasts really published each morning with weather forecasts, is the number that counts.
+forecasts really published each day with weather forecasts, is the number that counts.
 
 ## Design choices
 
-- **No leakage by construction.** The forecast is issued on the morning of day D for the 24 hours of D+1,
+- **No leakage by construction.** The forecast is issued on day D for the 24 hours of D+1,
   like RTE's. At that time the last complete day is D-1, so the shortest lag is 48 hours ("same hour the
   day before yesterday"), never 24. Training, backtest and prediction share one feature function, so the
   model never sees features built differently in production.
-- **Published forecasts are immutable.** The log keeps what was published each morning; a later re-run the
-  same day cannot quietly improve the track record (it is tested).
+- **Published forecasts are immutable.** The log keeps what was published each day; a later re-run the
+  same day cannot quietly improve the track record (it is tested). A day missed by a failed run stays
+  missing (the dashboard lists it) rather than being forecast after the fact.
+- **Real issue time, not the planned one.** GitHub Actions starts scheduled runs late: the cron is set
+  at 03:17 UTC and runs started between 09:00 and 10:30 UTC in October 2026. Each forecast logs when it
+  was really issued (`issued_at`), and the dashboard shows it.
+- **Failures explain themselves.** Each failing source is reported as a GitHub Actions annotation (the
+  error and the API's answer), readable on the run page without opening the logs. When ODRÉ started
+  sending a numeric column as text in October 2026, the annotation named the column on the first run.
 - **Honest evaluation.** The backtest uses *observed* temperatures, so it is an optimistic bound. The live
   track record, which uses real weather forecasts, is the number that counts. Both are compared with RTE's
   day-ahead forecast and with a naive "same hour last week" baseline.

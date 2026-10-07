@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>France Grid Forecast</title>
-<meta name="description" content="Day-ahead forecast of French electricity consumption, published every morning by an automated data pipeline and compared with RTE's official forecast.">
+<meta name="description" content="Day-ahead forecast of French electricity consumption, published every day by an automated data pipeline and compared with RTE's official forecast.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M18 2 6 18h8l-2 12 12-16h-8z' fill='%23eb6834'/%3E%3C/svg%3E">
 <style>
 :root {
@@ -69,7 +69,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 <body>
 <main>
   <h1>France grid forecast</h1>
-  <p class="lede">Tomorrow's electricity consumption in France, forecast every morning by an automated pipeline
+  <p class="lede">Tomorrow's electricity consumption in France, forecast every day by an automated pipeline
     and scored against what was really consumed, next to RTE's official day-ahead forecast.</p>
   <p class="meta" id="meta">Loading…</p>
 
@@ -77,7 +77,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 
   <section class="card">
     <h2>Consumption: last 14 days and tomorrow</h2>
-    <p class="sub">Hourly national consumption in GW (Paris time). Our forecast is issued each morning for the next day.</p>
+    <p class="sub">Hourly national consumption in GW (Paris time). Our forecast for the next day is issued once a day, usually around midday: GitHub Actions starts scheduled runs several hours late.</p>
     <div class="legend">
       <span><i class="key" style="border-color:var(--s-actual)"></i>Measured</span>
       <span><i class="key" style="border-color:var(--s-model)"></i>Our forecast</span>
@@ -97,6 +97,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
       </div>
       <div class="chart"><canvas id="c-live" aria-label="Daily forecast error of the three methods"></canvas></div>
     </div>
+    <p class="sub" id="live-missing" hidden></p>
     <details><summary>Table view</summary><div class="scroll"><table id="t-live"></table></div></details>
   </section>
 
@@ -123,7 +124,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
   <section class="card">
     <h2>How it works</h2>
     <ol class="flow">
-      <li><b>Extract</b>: every morning GitHub Actions downloads the new éCO2mix data (RTE, 15-minute points) and Open-Meteo temperatures for 8 cities into Parquet files.</li>
+      <li><b>Extract</b>: every day GitHub Actions downloads the new éCO2mix data (RTE, 15-minute points) and Open-Meteo temperatures for 8 cities into Parquet files.</li>
       <li><b>Transform and test</b>: dbt on DuckDB types, deduplicates and aggregates them to hourly tables, then runs the data tests above. A failed test stops the run: no forecast is published on bad data.</li>
       <li><b>Forecast</b>: a gradient-boosting model (scikit-learn) predicts the 24 hours of tomorrow from the calendar, holidays, temperature and consumption lags available at issue time.</li>
       <li><b>Score and publish</b>: each forecast is logged, scored once measured, and this page is rebuilt.</li>
@@ -212,6 +213,7 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   const gen = new Date(d.generated_at);
   document.getElementById('meta').textContent =
     `Updated ${gen.toLocaleString('en-GB', { timeZone: 'Europe/Paris' })} (Paris) · last measured hour ${timeLabel(d.last_measured_hour)}` +
+    (d.issues ? ` · last forecast issued ${timeLabel(d.issues.last_issued_at)} (Paris)` : '') +
     (d.model ? ` · model ${d.model.version}` : '');
 
   // --- tiles
@@ -220,7 +222,8 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   const tomorrow = d.forecasts.filter((f) => f.issue_date === lastIssue);
   if (tomorrow.length) {
     const peak = tomorrow.reduce((a, b) => (b.mw > a.mw ? b : a));
-    tiles.appendChild(tile('Next forecast peak', fmtGW(peak.mw), `at ${timeLabel(peak.hour)}`));
+    tiles.appendChild(tile('Next forecast peak', fmtGW(peak.mw),
+      `at ${timeLabel(peak.hour)}` + (d.issues ? ` · issued ${timeLabel(d.issues.last_issued_at)}` : '')));
   }
   const s = d.live && d.live.summary;
   const w = s && (s.last_30_days || s.since_launch);
@@ -235,6 +238,14 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   if (d.data_quality) {
     const q = d.data_quality;
     tiles.appendChild(tile('Data tests', `${q.passed} / ${q.total}`, q.passed === q.total ? 'all passed on the last run' : 'failures: see below'));
+  }
+
+  if (d.issues && d.issues.missing_issue_dates.length) {
+    const el = document.getElementById('live-missing');
+    el.textContent = 'No forecast was issued on ' +
+      d.issues.missing_issue_dates.map((x) => dateFmt.format(new Date(x + 'T12:00'))).join(', ') +
+      ' (failed run). Missed days are not filled in afterwards, so the day after them has no score.';
+    el.hidden = false;
   }
 
   // --- chart 1: measured, RTE and our forecast

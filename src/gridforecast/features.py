@@ -1,7 +1,7 @@
 """Features for the day-ahead forecast. One function for training, backtest and prediction, so
 the model never sees features computed differently in production (no train/serve skew).
 
-The forecast is issued in the morning of day D for the 24 hours of day D+1 (Paris time), like
+The forecast is issued on day D for the 24 hours of day D+1 (Paris time), like
 RTE's own day-ahead forecast. At that moment the last complete day is D-1, so a lag can only
 look 48 hours back or more: using "the same hour yesterday" (24 h) would leak data that does
 not exist yet at issue time.
