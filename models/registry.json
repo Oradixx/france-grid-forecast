@@ -1,0 +1,288 @@
+[
+  {
+    "version": "20260925-f63a26",
+    "trained_at": "2026-09-26T00:05:56+00:00",
+    "data_until": "2026-09-25T23:00:00+00:00",
+    "rows": 128987,
+    "holdout": {
+      "from": "2026-07-31T00:00:00+00:00",
+      "days": 56,
+      "hours": 1368,
+      "model": {
+        "mape": 2.3482844538018517,
+        "mae_mw": 995.3124672164339
+      },
+      "rte_d1": {
+        "mape": 1.453553333238835,
+        "mae_mw": 621.6698343079922
+      },
+      "naive_last_week": {
+        "mape": 3.4981486168663487,
+        "mae_mw": 1494.7926413255361
+      }
+    },
+    "gate": {
+      "passed": true,
+      "reasons": [],
+      "rules": {
+        "max_mape": 6.0,
+        "min_gain_vs_naive": 0.25
+      }
+    },
+    "params": {
+      "max_iter": 600,
+      "learning_rate": 0.05,
+      "max_leaf_nodes": 48,
+      "min_samples_leaf": 40,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "features": [
+      "hour",
+      "dow",
+      "doy_sin",
+      "doy_cos",
+      "is_holiday",
+      "is_bridge",
+      "is_weekend_or_holiday",
+      "temperature_c",
+      "temp_day_mean",
+      "temp_smooth",
+      "heating_degrees",
+      "cooling_degrees",
+      "lag_48h",
+      "lag_168h",
+      "lag_48h_was_off",
+      "lag_168h_was_off"
+    ],
+    "sklearn_version": "1.8.0"
+  },
+  {
+    "version": "20260926-a61a0e",
+    "trained_at": "2026-09-26T00:16:08+00:00",
+    "data_until": "2026-09-26T00:00:00+00:00",
+    "rows": 128959,
+    "holdout": {
+      "from": "2026-08-01T00:00:00+00:00",
+      "days": 56,
+      "hours": 1345,
+      "model": {
+        "mape": 1.8473969814764588,
+        "mae_mw": 785.5223710350533,
+        "bias_pct": 0.792595644974554
+      },
+      "naive_last_week": {
+        "mape": 3.5208448698874273,
+        "mae_mw": 1503.4221189591078,
+        "bias_pct": 0.6383092738328312
+      },
+      "realtime_hours": 1345,
+      "rte_d1": {
+        "mape": 1.4488322328445498,
+        "mae_mw": 618.5778810408922,
+        "bias_pct": 0.3686768557547764
+      },
+      "model_on_realtime": {
+        "mape": 1.8473969814764588,
+        "mae_mw": 785.5223710350533,
+        "bias_pct": 0.792595644974554
+      },
+      "naive_on_realtime": {
+        "mape": 3.5208448698874273,
+        "mae_mw": 1503.4221189591078,
+        "bias_pct": 0.6383092738328312
+      }
+    },
+    "gate": {
+      "passed": true,
+      "reasons": [],
+      "rules": {
+        "max_mape": 6.0,
+        "min_gain_vs_naive": 0.25
+      }
+    },
+    "params": {
+      "max_iter": 600,
+      "learning_rate": 0.05,
+      "max_leaf_nodes": 48,
+      "min_samples_leaf": 40,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "recency_half_life_years": 2.0,
+    "target": "consumption_mw / level_7d",
+    "features": [
+      "hour",
+      "dow",
+      "doy_sin",
+      "doy_cos",
+      "is_holiday",
+      "is_bridge",
+      "is_weekend_or_holiday",
+      "temperature_c",
+      "temp_day_mean",
+      "temp_smooth",
+      "heating_degrees",
+      "cooling_degrees",
+      "lag_48h",
+      "lag_168h",
+      "lag_48h_rel",
+      "lag_168h_rel",
+      "lag_48h_was_off",
+      "lag_168h_was_off"
+    ],
+    "sklearn_version": "1.8.0"
+  },
+  {
+    "version": "20260928-a61a0e",
+    "trained_at": "2026-09-28T06:38:57+00:00",
+    "data_until": "2026-09-28T06:00:00+00:00",
+    "rows": 129013,
+    "holdout": {
+      "from": "2026-08-03T00:00:00+00:00",
+      "days": 56,
+      "hours": 1351,
+      "model": {
+        "mape": 1.809162069241558,
+        "mae_mw": 766.6877045242455,
+        "bias_pct": 0.802713445421086
+      },
+      "naive_last_week": {
+        "mape": 3.468217440433288,
+        "mae_mw": 1480.5653219837159,
+        "bias_pct": 0.6699425509505889
+      },
+      "realtime_hours": 1351,
+      "rte_d1": {
+        "mape": 1.4407306913526097,
+        "mae_mw": 614.39822353812,
+        "bias_pct": 0.38382380652631426
+      },
+      "model_on_realtime": {
+        "mape": 1.809162069241558,
+        "mae_mw": 766.6877045242455,
+        "bias_pct": 0.802713445421086
+      },
+      "naive_on_realtime": {
+        "mape": 3.468217440433288,
+        "mae_mw": 1480.5653219837159,
+        "bias_pct": 0.6699425509505889
+      }
+    },
+    "gate": {
+      "passed": true,
+      "reasons": [],
+      "rules": {
+        "max_mape": 6.0,
+        "min_gain_vs_naive": 0.25
+      }
+    },
+    "params": {
+      "max_iter": 600,
+      "learning_rate": 0.05,
+      "max_leaf_nodes": 48,
+      "min_samples_leaf": 40,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "recency_half_life_years": 2.0,
+    "target": "consumption_mw / level_7d",
+    "features": [
+      "hour",
+      "dow",
+      "doy_sin",
+      "doy_cos",
+      "is_holiday",
+      "is_bridge",
+      "is_weekend_or_holiday",
+      "temperature_c",
+      "temp_day_mean",
+      "temp_smooth",
+      "heating_degrees",
+      "cooling_degrees",
+      "lag_48h",
+      "lag_168h",
+      "lag_48h_rel",
+      "lag_168h_rel",
+      "lag_48h_was_off",
+      "lag_168h_was_off"
+    ],
+    "sklearn_version": "1.8.0"
+  },
+  {
+    "version": "20261005-a61a0e",
+    "trained_at": "2026-10-05T07:42:57+00:00",
+    "data_until": "2026-10-05T07:00:00+00:00",
+    "rows": 129182,
+    "holdout": {
+      "from": "2026-08-10T00:00:00+00:00",
+      "days": 56,
+      "hours": 1352,
+      "model": {
+        "mape": 1.7780268824462164,
+        "mae_mw": 751.679982164364,
+        "bias_pct": 0.7885503170741172
+      },
+      "naive_last_week": {
+        "mape": 3.1537986517059404,
+        "mae_mw": 1343.9288091715975,
+        "bias_pct": 0.22921389957544913
+      },
+      "realtime_hours": 1352,
+      "rte_d1": {
+        "mape": 1.4067371608012584,
+        "mae_mw": 601.4339866863905,
+        "bias_pct": 0.3753394245288436
+      },
+      "model_on_realtime": {
+        "mape": 1.7780268824462164,
+        "mae_mw": 751.679982164364,
+        "bias_pct": 0.7885503170741172
+      },
+      "naive_on_realtime": {
+        "mape": 3.1537986517059404,
+        "mae_mw": 1343.9288091715975,
+        "bias_pct": 0.22921389957544913
+      }
+    },
+    "gate": {
+      "passed": true,
+      "reasons": [],
+      "rules": {
+        "max_mape": 6.0,
+        "min_gain_vs_naive": 0.25
+      }
+    },
+    "params": {
+      "max_iter": 600,
+      "learning_rate": 0.05,
+      "max_leaf_nodes": 48,
+      "min_samples_leaf": 40,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "recency_half_life_years": 2.0,
+    "target": "consumption_mw / level_7d",
+    "features": [
+      "hour",
+      "dow",
+      "doy_sin",
+      "doy_cos",
+      "is_holiday",
+      "is_bridge",
+      "is_weekend_or_holiday",
+      "temperature_c",
+      "temp_day_mean",
+      "temp_smooth",
+      "heating_degrees",
+      "cooling_degrees",
+      "lag_48h",
+      "lag_168h",
+      "lag_48h_rel",
+      "lag_168h_rel",
+      "lag_48h_was_off",
+      "lag_168h_was_off"
+    ],
+    "sklearn_version": "1.8.0"
+  }
+]
