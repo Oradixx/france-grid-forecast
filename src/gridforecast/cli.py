@@ -1,8 +1,9 @@
 """Command line entry point: python -m gridforecast <command>
 
     ingest [--full-history]   download new data into the lake
-    backtest [--start DATE]   train before DATE, score after it (report in lake/reports)
+    backtest [--start DATE]   train before DATE, score after it, interval included (report in lake/reports)
     train                     train a candidate, apply the quality gate, promote it if it passes
+    train-intervals           train the P10/P90 interval models used by the daily forecast
     predict [--date DATE]     forecast the day after DATE (default: today) and log it
     evaluate                  score published forecasts against measured consumption
     site                      build the dashboard (site/ + data.json) into ./public
@@ -15,7 +16,7 @@ import json
 import logging
 import sys
 
-from . import config, features, forecast, gha, ingest, model, site
+from . import config, features, forecast, gha, ingest, intervals, model, site
 
 
 def main(argv=None):
@@ -39,6 +40,8 @@ def _main(argv=None):
     p.add_argument('--if-stale', action='store_true', help='only if the report is missing or from other model code')
     p = sub.add_parser('train')
     p.add_argument('--if-stale', action='store_true', help='only if there is no model trained by the current code')
+    p = sub.add_parser('train-intervals')
+    p.add_argument('--if-stale', action='store_true', help='only if there are no interval models trained by the current code')
     p = sub.add_parser('predict')
     p.add_argument('--date', help='issue date (YYYY-MM-DD), the forecast is for the next day')
     p.add_argument('--replace', action='store_true', help="overwrite that day's published forecast")
@@ -55,23 +58,33 @@ def _main(argv=None):
     if args.cmd == 'train' and args.if_stale and not model.is_stale():
         print('current model matches the code, no retraining')
         return 0
+    if args.cmd == 'train-intervals' and args.if_stale and not intervals.is_stale():
+        print('interval models match the code, no retraining')
+        return 0
     if args.cmd == 'backtest' and args.if_stale:
         rep = config.REPORTS / 'backtest.json'
-        if rep.exists() and json.loads(rep.read_text()).get('model_signature') == model.code_signature():
+        old = json.loads(rep.read_text()) if rep.exists() else {}
+        if (old.get('model_signature') == model.code_signature()
+                and (old.get('intervals') or {}).get('signature') == intervals.code_signature()):
             print('backtest report matches the code, skipped')
             return 0
 
     df = features.load()
     if args.cmd == 'backtest':
         report, test = model.backtest(df, args.start)
+        report['intervals'] = intervals.backtest(df, test, args.start)
         forecast.write_json(report, config.REPORTS / 'backtest.json')
-        print(json.dumps(report['overall'], indent=2))
+        print(json.dumps({**report['overall'], 'interval': report['intervals']['overall']['model']}, indent=2))
     elif args.cmd == 'train':
         m, meta = model.train_candidate(df)
         promoted = model.promote(m, meta)
         print(json.dumps({'version': meta['version'], 'promoted': promoted, 'holdout': meta['holdout']}, indent=2))
         if not promoted and not (config.MODELS / 'current.json').exists():
             return 1  # no usable model at all
+    elif args.cmd == 'train-intervals':
+        im, meta = intervals.train(df)
+        intervals.save(im, meta)
+        print(json.dumps({'version': meta['version'], 'calibration': meta['calibration']}, indent=2))
     elif args.cmd == 'predict':
         out = forecast.predict(df, args.date)
         log = forecast.append(out, replace=args.replace)
@@ -79,7 +92,7 @@ def _main(argv=None):
         if not kept['forecast_mw'].equals(out['forecast_mw']):
             print(f"forecast issued on {out['issue_date'].iloc[0]} already published: kept unchanged")
         else:
-            print(out[['target_hour_utc', 'forecast_mw', 'rte_forecast_d1_mw', 'temperature_c']].to_string(index=False))
+            print(out[['target_hour_utc', 'forecast_mw', 'p10_mw', 'p90_mw', 'rte_forecast_d1_mw', 'temperature_c']].to_string(index=False))
     elif args.cmd == 'evaluate':
         ev = forecast.evaluate(df)
         forecast.write_json(ev, config.REPORTS / 'live.json')

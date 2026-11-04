@@ -29,6 +29,10 @@ def _dbt_results(path):
             'passed': sum(t['status'] == 'pass' for t in tests), 'total': len(tests)}
 
 
+def _num(v):
+    return None if pd.isna(v) else float(v)
+
+
 def _read(path):
     return json.loads(path.read_text()) if path.exists() else None
 
@@ -62,11 +66,16 @@ def build(df, out, dbt_target=None):
         # the latest issue for each target hour
         fc = fc.sort_values('issue_date').drop_duplicates('target_hour_utc', keep='last')
         fc = fc[fc['target_hour_utc'] >= since]
+        for col in ('p10_mw', 'p90_mw'):   # forecasts published before the interval existed have none
+            if col not in fc:
+                fc[col] = float('nan')
         forecasts = [{'hour': t.tz_convert(config.PARIS).strftime('%Y-%m-%dT%H:%M'), 'mw': float(v),
-                      'rte': None if pd.isna(r) else float(r), 'issue_date': d}
-                     for t, v, r, d in zip(fc['target_hour_utc'], fc['forecast_mw'], fc['rte_forecast_d1_mw'], fc['issue_date'])]
+                      'p10': _num(lo), 'p90': _num(hi), 'rte': _num(r), 'issue_date': d}
+                     for t, v, lo, hi, r, d in zip(fc['target_hour_utc'], fc['forecast_mw'], fc['p10_mw'], fc['p90_mw'],
+                                                   fc['rte_forecast_d1_mw'], fc['issue_date'])]
 
     current = _read(config.MODELS / 'current.json')
+    interval_models = _read(config.MODELS / 'intervals' / 'current.json')
     registry = _read(config.MODELS / 'registry.json') or []
     data = {
         'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
@@ -77,6 +86,7 @@ def build(df, out, dbt_target=None):
         'live': _read(config.REPORTS / 'live.json'),
         'backtest': _read(config.REPORTS / 'backtest.json'),
         'model': current and {k: current[k] for k in ('version', 'trained_at', 'data_until', 'holdout', 'gate', 'rows')},
+        'interval_models': interval_models and {k: interval_models[k] for k in ('version', 'trained_at', 'data_until', 'calibration')},
         'registry': [{'version': r['version'], 'trained_at': r['trained_at'], 'passed': r['gate']['passed'],
                       'holdout_mape': r['holdout']['model']['mape'], 'reasons': r['gate']['reasons']}
                      for r in registry[-10:]],

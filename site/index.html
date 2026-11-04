@@ -12,6 +12,7 @@
   --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #6f6d68;
   --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
   --s-actual: #2a78d6; --s-model: #eb6834; --s-rte: #1baf7a; --s-naive: #4a3aa7;
+  --s-band: rgba(235,104,52,0.16);
   --good: #0ca30c; --bad: #d03b3b; --good-text: #006300;
 }
 @media (prefers-color-scheme: dark) {
@@ -20,6 +21,7 @@
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9a988f;
     --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
     --s-actual: #3987e5; --s-model: #d95926; --s-rte: #199e70; --s-naive: #9085e9;
+    --s-band: rgba(217,89,38,0.26);
     --good-text: #0ca30c;
   }
 }
@@ -28,6 +30,7 @@
   --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9a988f;
   --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
   --s-actual: #3987e5; --s-model: #d95926; --s-rte: #199e70; --s-naive: #9085e9;
+  --s-band: rgba(217,89,38,0.26);
   --good-text: #0ca30c;
 }
 * { box-sizing: border-box; }
@@ -48,11 +51,13 @@ h2 { font-size: 18px; margin: 0 0 4px; }
 .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
 .key { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
 .key.dash { border-top-style: dashed; }
+.key.band { height: 10px; border-top: 0; border-radius: 2px; background: var(--s-band); }
 .chart { position: relative; height: 340px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--grid); }
 th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.nowrap td.num { white-space: nowrap; }
 .pass { color: var(--good-text); font-weight: 600; }
 .fail { color: var(--bad); font-weight: 600; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -77,10 +82,12 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 
   <section class="card">
     <h2>Consumption: last 14 days and tomorrow</h2>
-    <p class="sub">Hourly national consumption in GW (Paris time). Our forecast for the next day is issued once a day, usually around midday: GitHub Actions starts scheduled runs several hours late.</p>
+    <p class="sub">Hourly national consumption in GW (Paris time). Our forecast for the next day is issued once a day, usually around midday: GitHub Actions starts scheduled runs several hours late.
+      The shaded band is its 80 % interval: consumption should fall below it one hour in ten (P10) and above it one hour in ten (P90).</p>
     <div class="legend">
       <span><i class="key" style="border-color:var(--s-actual)"></i>Measured</span>
       <span><i class="key" style="border-color:var(--s-model)"></i>Our forecast</span>
+      <span id="band-key"><i class="key band"></i>80 % interval (P10–P90)</span>
       <span><i class="key dash" style="border-color:var(--s-rte)"></i>RTE day-ahead forecast</span>
     </div>
     <div class="chart"><canvas id="c-load" aria-label="Line chart of measured consumption, our forecast and RTE's forecast"></canvas></div>
@@ -116,6 +123,22 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
   </section>
 
   <section class="card">
+    <h2>Forecast interval (P10–P90)</h2>
+    <p class="sub" id="iv-sub">The interval appears with the next backtest.</p>
+    <div id="iv-wrap" hidden>
+      <div class="scroll"><table id="t-iv" class="nowrap"></table></div>
+      <p class="sub" style="margin-top:16px">Share of hours inside the band, month by month. A band that is right on average can still be too narrow in winter and too wide in summer.</p>
+      <div class="legend">
+        <span><i class="key" style="border-color:var(--s-model)"></i>Our band</span>
+        <span><i class="key dash" style="border-color:var(--s-actual)"></i>Constant band around our forecast</span>
+      </div>
+      <div class="chart"><canvas id="c-cov" aria-label="Monthly share of hours inside our band and inside the constant band, against the 80 % target"></canvas></div>
+      <details><summary>Month by month</summary><div class="scroll"><table id="t-iv-monthly" class="nowrap"></table></div></details>
+      <p class="sub" id="iv-cal" style="margin-top:12px"></p>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>Data quality</h2>
     <p class="sub" id="dq-sub"></p>
     <div class="scroll"><table id="t-dq"></table></div>
@@ -126,7 +149,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
     <ol class="flow">
       <li><b>Extract</b>: every day GitHub Actions downloads the new éCO2mix data (RTE, 15-minute points) and Open-Meteo temperatures for 8 cities into Parquet files.</li>
       <li><b>Transform and test</b>: dbt on DuckDB types, deduplicates and aggregates them to hourly tables, then runs the data tests above. A failed test stops the run: no forecast is published on bad data.</li>
-      <li><b>Forecast</b>: a gradient-boosting model (scikit-learn) predicts the 24 hours of tomorrow from the calendar, holidays, temperature and consumption lags available at issue time.</li>
+      <li><b>Forecast</b>: a gradient-boosting model (scikit-learn) predicts the 24 hours of tomorrow from the calendar, holidays, temperature and consumption lags available at issue time. Two more, trained with a quantile loss on the same features and calibrated on a year they did not see, give the 80 % interval.</li>
       <li><b>Score and publish</b>: each forecast is logged, scored once measured, and this page is rebuilt.</li>
     </ol>
     <p class="sub" style="margin-top:12px">Code, tests and design notes: <a href="https://github.com/Oradixx/france-grid-forecast">github.com/Oradixx/france-grid-forecast</a></p>
@@ -143,6 +166,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 <script>
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const fmtPct = (v) => v == null ? '–' : v.toFixed(2) + ' %';
+const fmtPct1 = (v) => v == null ? '–' : v.toFixed(1) + ' %';
 const fmtGW = (mw) => mw == null ? '–' : (mw / 1000).toFixed(1) + ' GW';
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
 const dateFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -204,6 +228,18 @@ function baseOptions(yTitle, yFmt) {
   };
 }
 
+// horizontal reference line with its label, drawn under the series
+const target = (value, label) => ({
+  id: 'target',
+  beforeDatasetsDraw(chart) {
+    const y = chart.scales.y.getPixelForValue(value), { left, right } = chart.chartArea, ctx = chart.ctx;
+    ctx.save(); ctx.strokeStyle = css('--ink-2'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+    ctx.fillStyle = css('--ink-2'); ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(label, right, y - 3); ctx.restore();
+  },
+});
+
 const line = (label, data, color, dash) => ({
   label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0,
   pointHoverRadius: 4, borderDash: dash ? [6, 4] : [], spanGaps: false, tension: 0,
@@ -223,7 +259,8 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   if (tomorrow.length) {
     const peak = tomorrow.reduce((a, b) => (b.mw > a.mw ? b : a));
     tiles.appendChild(tile('Next forecast peak', fmtGW(peak.mw),
-      `at ${timeLabel(peak.hour)}` + (d.issues ? ` · issued ${timeLabel(d.issues.last_issued_at)}` : '')));
+      `at ${timeLabel(peak.hour)}` + (peak.p10 != null ? ` · P10–P90 ${(peak.p10 / 1000).toFixed(1)}–${fmtGW(peak.p90)}` : '') +
+      (d.issues ? ` · issued ${timeLabel(d.issues.last_issued_at)}` : '')));
   }
   const s = d.live && d.live.summary;
   const w = s && (s.last_30_days || s.since_launch);
@@ -257,14 +294,34 @@ fetch('data.json').then((r) => r.json()).then((d) => {
   const pick = (arr) => labels.map((h) => (idx.has(h) ? arr[idx.get(h)] : null));
   const rte = labels.map((h, i) => { const v = pick(d.chart.rte_forecast_d1_mw)[i]; return v != null ? v : fcByHour.get(h)?.rte ?? null; });
   const gw = (arr) => arr.map((v) => (v == null ? null : v / 1000));
+  const p10 = gw(labels.map((h) => fcByHour.get(h)?.p10 ?? null));
+  const p90 = gw(labels.map((h) => fcByHour.get(h)?.p90 ?? null));
+  document.getElementById('band-key').hidden = !p90.some((v) => v != null);
+  // P90 fills down to P10 (the dataset before it); the last datasets are drawn first, under the lines
+  const band = (label, data, fill) => ({ label, data, fill, borderWidth: 0, borderColor: 'transparent',
+    backgroundColor: css('--s-band'), pointRadius: 0, pointHoverRadius: 0, spanGaps: false, tension: 0 });
+  const loadOptions = baseOptions('GW', (v) => v.toFixed(1) + ' GW');
+  Object.assign(loadOptions.plugins.tooltip, {
+    filter: (c) => c.dataset.label !== 'P10',
+    callbacks: {
+      label: (c) => c.dataset.label === 'P90'
+        ? ` ${p10[c.dataIndex].toFixed(1)}–${c.parsed.y.toFixed(1)} GW  80 % interval`
+        : ` ${c.parsed.y.toFixed(1)} GW  ${c.dataset.label}`,
+      labelColor: (c) => c.dataset.label === 'P90'
+        ? { borderColor: css('--s-band'), backgroundColor: css('--s-band') }
+        : { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor },
+    },
+  });
   new Chart(document.getElementById('c-load'), {
     type: 'line',
     data: { labels: labels.map(timeLabel), datasets: [
       line('Measured', gw(pick(d.chart.consumption_mw)), css('--s-actual')),
       line('Our forecast', gw(labels.map((h) => fcByHour.get(h)?.mw ?? null)), css('--s-model')),
       line('RTE day-ahead', gw(rte), css('--s-rte'), true),
+      band('P10', p10, false),
+      band('P90', p90, '-1'),
     ] },
-    options: baseOptions('GW', (v) => v.toFixed(1) + ' GW'),
+    options: loadOptions,
     plugins: [crosshair],
   });
 
@@ -309,6 +366,43 @@ fetch('data.json').then((r) => r.json()).then((d) => {
     fillTable(document.getElementById('t-bt'), [['Method'], ['MAPE', 1], ['MAE', 1]], rows.map((r) => r[1] === '' ? [el('b', r[0]), '', ''] : r));
     fillTable(document.getElementById('t-bt-monthly'), [['Month'], ['Data'], ['Ours', 1], ['RTE', 1], ['Naive', 1]],
       b.monthly_mape.map((m) => [m.month, m.data_version, fmtPct(m.model), fmtPct(m.rte_d1), fmtPct(m.naive_last_week)]));
+  }
+
+  // --- forecast interval
+  const iv = d.backtest && d.backtest.intervals;
+  if (iv) {
+    const o = iv.overall;
+    document.getElementById('iv-wrap').hidden = false;   // before drawing: a hidden canvas has no size
+    document.getElementById('iv-sub').textContent =
+      `P10 and P90 come from two gradient-boosting models trained with a quantile loss, each then moved, on a year they did not see, ` +
+      `until it misses ${Math.round((1 - iv.quantiles[1]) * 100)} % of its hours. Backtest on the same ${o.model.hours.toLocaleString('en-GB')} hours as above, ` +
+      'with observed temperatures: the live band will hold fewer hours. In brackets, a 95 % interval of the share inside, resampling whole weeks ' +
+      '(misses come in runs). The pinball loss scores each bound, lower is better: only a band that is both right and narrow scores low.';
+    const ci = (s) => `${fmtPct1(s.coverage_pct)} (${s.coverage_ci95_pct.map((v) => v.toFixed(1)).join('–')})`;
+    const row = (name, s) => [name, ci(s), fmtPct1(s.below_p10_pct), fmtPct1(s.above_p90_pct), fmtGW(s.mean_width_mw), Math.round(s.pinball_mw) + ' MW'];
+    fillTable(document.getElementById('t-iv'),
+      [['Band'], [`Inside (target ${iv.nominal_coverage_pct} %)`, 1], ['Below P10 (10 %)', 1], ['Above P90 (10 %)', 1], ['Mean width', 1], ['Pinball', 1]],
+      [row('Ours: quantile models, calibrated', o.model),
+       row('Constant band around our forecast', o.constant_band),
+       row('Naive: last week × typical change', o.naive_band)]);
+    const months = iv.monthly.filter((m) => m.hours >= 7 * 24);   // a month cut after a few days says little
+    new Chart(document.getElementById('c-cov'), {
+      type: 'line',
+      data: { labels: months.map((m) => new Date(m.month + '-15').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })), datasets: [
+        { ...line('Our band', months.map((m) => m.coverage_pct), css('--s-model')), pointRadius: 3 },
+        { ...line('Constant band', months.map((m) => m.constant_band_coverage_pct), css('--s-actual'), true), pointRadius: 3 },
+      ] },
+      options: (() => { const op = baseOptions('% of hours inside', (v) => v.toFixed(1) + ' %'); op.scales.y.suggestedMin = 50; op.scales.y.suggestedMax = 100; return op; })(),
+      plugins: [crosshair, target(iv.nominal_coverage_pct, `${iv.nominal_coverage_pct} % target`)],
+    });
+    fillTable(document.getElementById('t-iv-monthly'), [['Month'], ['Inside', 1], ['Below P10', 1], ['Above P90', 1], ['Width', 1], ['Constant band inside', 1]],
+      iv.monthly.map((m) => [m.month, fmtPct1(m.coverage_pct), fmtPct1(m.below_p10_pct), fmtPct1(m.above_p90_pct), fmtGW(m.mean_width_mw), fmtPct1(m.constant_band_coverage_pct)]));
+    const cur = d.interval_models;
+    document.getElementById('iv-cal').textContent = cur
+      ? `Current interval models ${cur.version}, calibrated on ${cur.calibration.from.slice(0, 10)} to ${cur.calibration.until.slice(0, 10)}: before calibration they held ` +
+        `${fmtPct1(cur.calibration.uncalibrated.coverage_pct)} of those hours, so P10 was moved down by ${fmtPct(cur.calibration.p10_moved_down_pct)} ` +
+        `and P90 up by ${fmtPct(cur.calibration.p90_moved_up_pct)} of the recent level.`
+      : '';
   }
 
   // --- registry
