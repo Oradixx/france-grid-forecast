@@ -122,6 +122,17 @@ def test_interval_models_from_other_code_are_not_used(grid, lake, trained, tmp_p
     assert forecast.predict(grid, '2026-06-28', models_dir=d)['p10_mw'].isna().all()
 
 
+def test_a_failing_interval_model_does_not_stop_the_forecast(grid, lake, trained, tmp_path, monkeypatch):
+    d = point_model_only(grid, tmp_path / 'models')
+    intervals.save(*trained, models_dir=d)
+
+    def broken(self, X):
+        raise AttributeError('saved by an older version of the class')
+    monkeypatch.setattr(intervals.IntervalModel, 'predict', broken)
+    out = forecast.predict(grid, '2026-06-28', models_dir=d)
+    assert out['forecast_mw'].notna().all() and out['p10_mw'].isna().all()
+
+
 def test_a_log_from_before_the_interval_still_works(grid, lake, trained, tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'FORECASTS', tmp_path / 'forecasts.parquet')
     d = point_model_only(grid, tmp_path / 'models')

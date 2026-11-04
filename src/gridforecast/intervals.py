@@ -78,9 +78,9 @@ def _move(scores, alpha):
 
 
 class IntervalModel:
-    """The P10 and P90 models, and how far the calibration moves each bound outwards (as a share of
-    the 7-day level, so that the move scales with consumption: about 1 % is 400 MW in summer and
-    700 MW in winter)."""
+    """The P10 and P90 models, and how far the calibration moves each bound outwards (negative:
+    inwards), as a share of the 7-day level so that the move scales with consumption: about 1 % is
+    400 MW in summer and 700 MW in winter."""
 
     def __init__(self):
         self.bounds = [model.RelativeModel(**model.PARAMS, loss='quantile', quantile=q) for q in QUANTILES]

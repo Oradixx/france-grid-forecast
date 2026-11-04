@@ -51,14 +51,14 @@ def predict(df, issue_date=None, models_dir=None):
 
 def _band(rows, models_dir=None):
     """P10 and P90 of the target hours, from the same feature rows as the point forecast. Without
-    usable interval models, the forecast is published without a band (and a warning): the band
-    never stops the point forecast."""
+    usable interval models (missing, from other code, or failing for any other reason), the
+    forecast is published without a band, with a warning: the band never stops the point forecast."""
     try:
         im, meta = intervals.load_current(models_dir)
-    except (FileNotFoundError, RuntimeError) as e:
-        gha.annotate('warning', f'no P10/P90 interval: {e}', title='Forecast published without its interval')
+        lo, hi = im.predict(rows)
+    except Exception as e:
+        gha.annotate('warning', f'no P10/P90 interval: {type(e).__name__}: {e}', title='Forecast published without its interval')
         return np.nan, np.nan, None
-    lo, hi = im.predict(rows)
     return lo.round(0), hi.round(0), meta['version']
 
 
