@@ -58,6 +58,7 @@ jobs:
         run: |
           gridforecast backtest --if-stale
           gridforecast train --if-stale
+          gridforecast train-intervals --if-stale
 
       - name: Forecast tomorrow
         run: gridforecast predict

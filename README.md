@@ -9,8 +9,8 @@
 **Live dashboard: https://oradixx.github.io/france-grid-forecast/**
 
 Every day, an automated pipeline downloads the latest French electricity data, tests it, forecasts
-**tomorrow's national consumption hour by hour**, and scores every past forecast against what was really
-consumed, next to **RTE's official day-ahead forecast** and a naive baseline.
+**tomorrow's national consumption hour by hour, with an 80 % interval**, and scores every past forecast
+against what was really consumed, next to **RTE's official day-ahead forecast** and a naive baseline.
 
 It runs entirely on free tools: GitHub Actions for scheduling, Parquet files on a git branch as the
 data lake, dbt on DuckDB for transformations and data tests, scikit-learn for the model, GitHub Pages for
@@ -27,13 +27,14 @@ flowchart LR
     subgraph "GitHub Actions (daily)"
         I["ingest.py<br/>incremental, idempotent,<br/>retries"] --> R[("raw Parquet<br/>data branch")]
         R --> D["dbt on DuckDB<br/>staging → marts<br/>+ data tests"]
-        D -->|tests pass| F["forecast tomorrow<br/>(current model)"]
+        D -->|tests pass| F["forecast tomorrow<br/>(current model + P10/P90)"]
         F --> L[("forecast log")]
         L --> S["score + dashboard"]
     end
     subgraph "GitHub Actions (weekly)"
         T["retrain + backtest"] --> G{"quality gate<br/>on 8-week holdout"}
         G -->|pass| M[("model registry")]
+        T --> Q["P10/P90 models<br/>calibrated on the last year"] --> M
     end
     E --> I
     W --> I
@@ -46,9 +47,9 @@ flowchart LR
 | **Extract** | Downloads the éCO2mix history once (2012 onwards, ~25 MB), then only the last days of real-time data on each run; stores them as downloaded, partitioned by year or month. Re-running a day replaces a partition, never appends to it. | [`ingest.py`](src/gridforecast/ingest.py) |
 | **Transform** | dbt models on DuckDB read the Parquet files directly: type and deduplicate the two éCO2mix datasets, aggregate to hourly, weight city temperatures into a national one. | [`dbt/models`](dbt/models) |
 | **Test** | 19 dbt data tests: uniqueness, ranges, no missing hour, data freshness, and a cross-check between RTE's forecast and the measured consumption. A failure stops the run before any forecast is published. | [`schema.yml`](dbt/models/schema.yml), [`dbt/tests`](dbt/tests) |
-| **Forecast** | Gradient boosting (scikit-learn) on calendar, French holidays and bridge days, temperature (hour, day mean, slow average for building inertia) and consumption lags. | [`features.py`](src/gridforecast/features.py), [`model.py`](src/gridforecast/model.py) |
+| **Forecast** | Gradient boosting (scikit-learn) on calendar, French holidays and bridge days, temperature (hour, day mean, slow average for building inertia) and consumption lags. Two more models on the same features, trained with a quantile loss and calibrated on a year they did not see, give the P10/P90 interval. | [`features.py`](src/gridforecast/features.py), [`model.py`](src/gridforecast/model.py), [`intervals.py`](src/gridforecast/intervals.py) |
 | **MLOps** | Weekly retrain on the full history, promotion only through a quality gate, registry of every version, append-only forecast log, scikit-learn version check at load time. | [`model.py`](src/gridforecast/model.py), [`forecast.py`](src/gridforecast/forecast.py) |
-| **Publish** | Static dashboard (Chart.js) with the forecasts, the live track record, the backtest, the registry and the data test results. | [`site/`](site/index.html), [`site.py`](src/gridforecast/site.py) |
+| **Publish** | Static dashboard (Chart.js) with the forecasts and their interval, the live track record, the backtest, the registry and the data test results. | [`site/`](site/index.html), [`site.py`](src/gridforecast/site.py) |
 
 ## Results
 
@@ -64,6 +65,22 @@ The model halves the error of the naive baseline; RTE's official forecast stays 
 from the grid operator's own forecasting team and weather inputs. Both evaluations use observed temperatures,
 so they are optimistic: the [live track record](https://oradixx.github.io/france-grid-forecast/), built from
 forecasts really published each day with weather forecasts, is the number that counts.
+
+**80 % interval (P10-P90)**, same backtest (trained on 2012-2024, tested on the 16,113 hours from January 2025
+to 2 November 2026). Each bound should miss 10 % of the hours; the pinball loss scores both bounds, lower is better:
+
+| Band | Hours inside (target 80 %) | Below P10 / above P90 | Mean width | Pinball loss |
+|---|---|---|---|---|
+| Quantile models, calibrated (ours) | **76.3 %** (73.8-78.9) | 11.2 % / 12.5 % | 3.5 GW (7.0 %) | 269 MW |
+| Constant band around our forecast | 78.4 % (75.5-81.2) | 9.1 % / 12.5 % | 3.3 GW (6.6 %) | 263 MW |
+| Naive: last week × usual weekly change | 80.9 % (75.9-85.5) | 10.4 % / 8.7 % | 10.4 GW (20.8 %) | 853 MW |
+
+In brackets, a 95 % interval from resampling whole weeks. Our band is a little too narrow, mostly on the high
+side. A constant band around the point forecast (its usual error ratio on the calibration year) has a slightly
+lower pinball loss, overall and in each season, but it holds 70 % of the hours from November to March and 83 %
+from April to October: too narrow when consumption is high, too wide in summer. Ours holds 76 % in both seasons
+(wider in winter, narrower in summer), so "80 % interval" means the same thing in January and in July. The live
+band, with weather forecasts, will hold fewer hours.
 
 ## Design choices
 
@@ -87,6 +104,13 @@ forecasts really published each day with weather forecasts, is the number that c
   then multiplies back. It follows slow trends (efficiency, the 2022-23 energy savings) and it makes the
   model insensitive to the level gap between the two versions of RTE's data (next section). Older years
   also weigh less in training (half-life of 2 years).
+- **Calibrated intervals.** P10 and P90 come from two more gradient-boosting models with the point model's
+  features, relative target, hyperparameters and weights, trained with the pinball loss of their quantile.
+  Each bound is then moved by what makes it miss 10 % of a year the models did not see (conformalized
+  quantile regression, one tail at a time), and the models are refit on everything with those moves. Each
+  tail is calibrated on its own because an 80 % coverage can hide a band that sits too high. The point model
+  is untouched: the band is a separate estimate, the forecast is published without it if it is unavailable,
+  and it has no gate (the backtest reports how it holds).
 - **Retrain only through a gate.** Every week a candidate is trained without the last 8 weeks, scored on
   them, and promoted only if its error is below 6 % and at least 25 % below the naive baseline. Every
   candidate is kept in the registry with its scores, promoted or not. A change to the model code triggers
@@ -115,6 +139,15 @@ Real sources are messier than tutorials:
   real-time version. Scoring it against consolidated data made it look worse than my first model; the
   comparison is now only made on real-time data, and the live scores freeze the measured value the day it
   is first published.
+- **Quantile boosting is over-confident.** With the point model's settings, the raw P10 and P90 models held
+  64 % of the hours of a year they had not seen, not 80 %: the trees fit the training hours more tightly than
+  new ones. Early stopping did not help: scikit-learn checks it on a random 10 % of the training hours, which
+  sit next to training hours and look just as easy, and it never stopped before the 600 iterations. Calibrating
+  each bound on a held-out year fixed most of it; tuning the trees on 2024 did not.
+- **Errors come in runs.** Whether an hour falls outside the band depends on the hours before it (a cold spell,
+  a holiday week): the daily miss rate stays correlated for 2 to 3 days. 16,000 hours are therefore far fewer
+  independent observations, and a binomial interval for the coverage (±0.7 points) is about four times too
+  narrow; resampling whole weeks gives ±2.5.
 - **Revisions.** Recent real-time values are revised and months move from "real time" to "consolidated"
   to "definitive": staging keeps the most final version of each timestamp.
 
@@ -129,7 +162,7 @@ pytest                       # tests on a frozen sample of real data (tests/fixt
 
 gridforecast ingest          # first run: whole history, ~10 minutes (weather API pacing)
 (cd dbt && dbt build --profiles-dir .)
-gridforecast backtest && gridforecast train
+gridforecast backtest && gridforecast train && gridforecast train-intervals
 gridforecast predict && gridforecast evaluate
 gridforecast site --out public && python -m http.server -d public
 ```
@@ -140,7 +173,7 @@ The lake goes to `./lake` and the warehouse to `./warehouse.duckdb` (override wi
 ## Structure
 
 ```
-├── src/gridforecast/   # ingest, features, model, forecast, site, CLI
+├── src/gridforecast/   # ingest, features, model, intervals, forecast, site, CLI
 ├── dbt/                # staging and mart models, seed (cities and weights), data tests
 ├── site/               # dashboard page
 ├── tests/              # pytest + fixture lake built from real éCO2mix data

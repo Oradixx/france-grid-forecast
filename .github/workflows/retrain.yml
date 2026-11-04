@@ -1,7 +1,8 @@
 name: Weekly retrain
 
 # Every Monday: refresh the whole history (RTE consolidates past months), rebuild, backtest,
-# train a candidate and promote it only if it passes the quality gate (see src/gridforecast/model.py).
+# train a candidate and promote it only if it passes the quality gate (see src/gridforecast/model.py),
+# then retrain the P10/P90 interval models (src/gridforecast/intervals.py).
 on:
   schedule:
     - cron: "43 1 * * 1"   # before the daily run, so Monday's forecast uses the new model
@@ -36,6 +37,8 @@ jobs:
       - run: gridforecast backtest
       - name: Train, gate, promote
         run: gridforecast train
+      - name: Train the P10/P90 interval models
+        run: gridforecast train-intervals
       - name: Save the lake
         if: always()
         uses: ./.github/actions/save-lake

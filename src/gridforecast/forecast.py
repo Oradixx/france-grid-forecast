@@ -1,17 +1,18 @@
 """Daily forecast and its evaluation.
 
-forecasts.parquet is an append-only log: one row per (issue date, target hour), with our forecast,
-RTE's day-ahead forecast and the naive baseline as known at issue time, and the temperature
-forecast used. Past forecasts are never recomputed: the track record is what was really
+forecasts.parquet is an append-only log: one row per (issue date, target hour), with our forecast
+and its P10/P90 interval, RTE's day-ahead forecast and the naive baseline as known at issue time,
+and the temperature forecast used. Past forecasts are never recomputed: the track record is what was really
 published, not what today's model would say.
 """
 import json
 import logging
 from datetime import datetime, timezone
 
+import numpy as np
 import pandas as pd
 
-from . import config
+from . import config, gha, intervals
 from .features import FEATURES, LEVEL, TARGET, build, target_hours
 from .model import load_current, mape
 
@@ -29,19 +30,36 @@ def predict(df, issue_date=None, models_dir=None):
     if missing.any():
         cols = rows[need].columns[rows[need].isna().any()].tolist()
         raise RuntimeError(f'{int(missing.sum())} target hours miss features {cols}: no forecast published')
+    p10, p90, interval_version = _band(rows, models_dir)
     out = pd.DataFrame({
         'issue_date': issue_date.date().isoformat(),
         'issued_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         'target_hour_utc': hours,
         'forecast_mw': model.predict(rows).round(0),
+        'p10_mw': p10,
+        'p90_mw': p90,
         'rte_forecast_d1_mw': rows['rte_forecast_d1_mw'].to_numpy(),
         'naive_mw': rows['lag_168h'].to_numpy(),
         'temperature_c': rows['temperature_c'].round(2).to_numpy(),
         'model_version': meta['version'],
+        'interval_version': interval_version,
     })
     log.info('forecast for %s: %d hours, peak %.0f MW', hours[0].tz_convert(config.PARIS).date(),
              len(out), out['forecast_mw'].max())
     return out
+
+
+def _band(rows, models_dir=None):
+    """P10 and P90 of the target hours, from the same feature rows as the point forecast. Without
+    usable interval models, the forecast is published without a band (and a warning): the band
+    never stops the point forecast."""
+    try:
+        im, meta = intervals.load_current(models_dir)
+    except (FileNotFoundError, RuntimeError) as e:
+        gha.annotate('warning', f'no P10/P90 interval: {e}', title='Forecast published without its interval')
+        return np.nan, np.nan, None
+    lo, hi = im.predict(rows)
+    return lo.round(0), hi.round(0), meta['version']
 
 
 def append(new, path=None, replace=False):
