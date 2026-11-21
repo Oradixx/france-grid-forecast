@@ -1,0 +1,76 @@
+{
+  "version": "20261116-a61a0e",
+  "trained_at": "2026-11-16T08:37:38+00:00",
+  "data_until": "2026-11-16T08:00:00+00:00",
+  "rows": 130190,
+  "holdout": {
+    "from": "2026-09-21T00:00:00+00:00",
+    "days": 56,
+    "hours": 1352,
+    "model": {
+      "mape": 2.22655739130874,
+      "mae_mw": 1088.8973991077073,
+      "bias_pct": 0.8188560180256351
+    },
+    "naive_last_week": {
+      "mape": 5.265332735684623,
+      "mae_mw": 2633.2394600591715,
+      "bias_pct": -2.5694418231544325
+    },
+    "realtime_hours": 1352,
+    "rte_d1": {
+      "mape": 1.3121988807679648,
+      "mae_mw": 623.3565088757397,
+      "bias_pct": 0.2955997421871377
+    },
+    "model_on_realtime": {
+      "mape": 2.22655739130874,
+      "mae_mw": 1088.8973991077073,
+      "bias_pct": 0.8188560180256351
+    },
+    "naive_on_realtime": {
+      "mape": 5.265332735684623,
+      "mae_mw": 2633.2394600591715,
+      "bias_pct": -2.5694418231544325
+    }
+  },
+  "gate": {
+    "passed": true,
+    "reasons": [],
+    "rules": {
+      "max_mape": 6.0,
+      "min_gain_vs_naive": 0.25
+    }
+  },
+  "params": {
+    "max_iter": 600,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 48,
+    "min_samples_leaf": 40,
+    "l2_regularization": 1.0,
+    "random_state": 0
+  },
+  "recency_half_life_years": 2.0,
+  "target": "consumption_mw / level_7d",
+  "features": [
+    "hour",
+    "dow",
+    "doy_sin",
+    "doy_cos",
+    "is_holiday",
+    "is_bridge",
+    "is_weekend_or_holiday",
+    "temperature_c",
+    "temp_day_mean",
+    "temp_smooth",
+    "heating_degrees",
+    "cooling_degrees",
+    "lag_48h",
+    "lag_168h",
+    "lag_48h_rel",
+    "lag_168h_rel",
+    "lag_48h_was_off",
+    "lag_168h_was_off"
+  ],
+  "sklearn_version": "1.8.0"
+}
