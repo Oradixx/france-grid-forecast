@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-11-23T09:48:29+00:00",
+  "model_signature": "a61a0e",
+  "train_until": "2025-01-01",
+  "test_from": "2025-01-01",
+  "test_until": "2026-11-23T09:00:00+00:00",
+  "weather_note": "observed temperatures (optimistic compared with live forecasts)",
+  "rte_note": "RTE is only scored on real-time data, the version its forecast targets",
+  "overall": {
+    "hours": 16592,
+    "model": {
+      "mape": 2.2178915743694696,
+      "mae_mw": 1137.7884365305904,
+      "bias_pct": 0.44823860318218167
+    },
+    "naive_last_week": {
+      "mape": 6.349704501528672,
+      "mae_mw": 3352.7566497910643,
+      "bias_pct": 0.5233582654786527
+    },
+    "realtime_hours": 2003,
+    "rte_d1": {
+      "mape": 1.3020498205851792,
+      "mae_mw": 613.2750041604261,
+      "bias_pct": 0.2418388749046364
+    },
+    "model_on_realtime": {
+      "mape": 2.2378404568374948,
+      "mae_mw": 1075.9520377881888,
+      "bias_pct": 0.8815409809116268
+    },
+    "naive_on_realtime": {
+      "mape": 4.607631106044742,
+      "mae_mw": 2270.133840905309,
+      "bias_pct": -1.5848326649283564
+    }
+  },
+  "monthly_mape": [
+    {
+      "month": "2025-01",
+      "model": 3.3581768653051145,
+      "naive_last_week": 10.243117425744416,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-02",
+      "model": 2.196919083885185,
+      "naive_last_week": 8.212279726862686,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-03",
+      "model": 2.555403193926393,
+      "naive_last_week": 12.337669476296965,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-04",
+      "model": 2.7005605673646698,
+      "naive_last_week": 6.170866497499813,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-05",
+      "model": 2.1131875232076784,
+      "naive_last_week": 5.50079870577053,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-06",
+      "model": 1.1959383978107596,
+      "naive_last_week": 3.6489832365121058,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-07",
+      "model": 2.1073391165282715,
+      "naive_last_week": 4.730368552023739,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-08",
+      "model": 1.525775517414763,
+      "naive_last_week": 3.808499280047919,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-09",
+      "model": 1.404148329834632,
+      "naive_last_week": 2.4041596212118854,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-10",
+      "model": 1.5664868304358153,
+      "naive_last_week": 2.895016215405497,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-11",
+      "model": 3.172800099096552,
+      "naive_last_week": 9.347198515724722,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2025-12",
+      "model": 2.409894034575186,
+      "naive_last_week": 7.914025789798217,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-01",
+      "model": 2.6768344918070026,
+      "naive_last_week": 10.17426930823005,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-02",
+      "model": 2.160204691826605,
+      "naive_last_week": 8.625017607109575,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-03",
+      "model": 2.556355176628091,
+      "naive_last_week": 6.7180139683448425,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-04",
+      "model": 2.1684323363863682,
+      "naive_last_week": 9.719520391111752,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-05",
+      "model": 2.4401611375277787,
+      "naive_last_week": 5.384497362023422,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-06",
+      "model": 1.749467450214126,
+      "naive_last_week": 5.441382781589054,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-07",
+      "model": 2.291612467789861,
+      "naive_last_week": 5.25953696501391,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-08",
+      "model": 1.9197082614416199,
+      "naive_last_week": 3.5190351031413796,
+      "rte_d1": null,
+      "data_version": "consolidated"
+    },
+    {
+      "month": "2026-09",
+      "model": 1.7440906814019053,
+      "naive_last_week": 2.4416847628610676,
+      "rte_d1": 1.3043149323012655,
+      "data_version": "real time"
+    },
+    {
+      "month": "2026-10",
+      "model": 2.1658676656644804,
+      "naive_last_week": 4.389119238643784,
+      "rte_d1": 1.2959621165881792,
+      "data_version": "real time"
+    },
+    {
+      "month": "2026-11",
+      "model": 2.9967413751053007,
+      "naive_last_week": 7.802536850828713,
+      "rte_d1": 1.3074271329009228,
+      "data_version": "real time"
+    }
+  ]
+}
